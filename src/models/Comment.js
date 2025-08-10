@@ -22,6 +22,24 @@ const commentSchema = new mongoose.Schema({
     trim: true,
     maxlength: 2000
   },
+  containsSpoilers: {
+    type: Boolean,
+    default: false
+  },
+  reactionCounts: {
+    likes: { type: Number, default: 0 },
+    dislikes: { type: Number, default: 0 }
+  },
+  userReactions: [{
+    userId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User'
+    },
+    type: {
+      type: String,
+      enum: ['likes', 'dislikes']
+    }
+  }],
   parentCommentId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Comment',
