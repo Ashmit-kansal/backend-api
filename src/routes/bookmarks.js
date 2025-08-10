@@ -4,6 +4,20 @@ const Bookmark = require('../models/Bookmark');
 const Manga = require('../models/Manga');
 const Chapter = require('../models/Chapter');
 const auth = require('../middleware/auth');
+const mongoose = require('mongoose');
+
+// Debug middleware to log all requests to bookmarks router
+router.use((req, res, next) => {
+  console.log('📚 Bookmarks Router - Request received:', {
+    method: req.method,
+    url: req.url,
+    path: req.path,
+    params: req.params,
+    body: req.body,
+    user: req.user ? req.user._id : 'No user'
+  });
+  next();
+});
 
 // Apply auth middleware to all bookmark routes
 router.use(auth);
@@ -22,6 +36,16 @@ router.get('/', async (req, res) => {
     console.log('🔍 GET /bookmarks - Found bookmarks:', bookmarks);
     console.log('🔍 GET /bookmarks - Bookmark count:', bookmarks.length);
     
+    // Debug: Log each bookmark's mangaId for comparison
+    bookmarks.forEach((bookmark, index) => {
+      console.log(`🔍 Bookmark ${index + 1}:`, {
+        bookmarkId: bookmark._id,
+        mangaId: bookmark.mangaId._id,
+        mangaTitle: bookmark.mangaId.title,
+        userId: bookmark.userId
+      });
+    });
+    
     res.json({
       success: true,
       data: bookmarks
@@ -38,7 +62,12 @@ router.get('/', async (req, res) => {
 // Add bookmark
 router.post('/', async (req, res) => {
   try {
-    const { mangaId, lastReadChapter } = req.body;
+    console.log('📚 POST /bookmarks - Request body:', req.body);
+    console.log('📚 POST /bookmarks - User ID:', req.user._id);
+    
+    const { mangaId, lastReadId } = req.body;
+    
+    console.log('📚 POST /bookmarks - Extracted data:', { mangaId, lastReadId });
     
     // Check if bookmark already exists
     const existingBookmark = await Bookmark.findOne({ 
@@ -55,11 +84,15 @@ router.post('/', async (req, res) => {
     
     const bookmark = new Bookmark({
       mangaId,
-      lastReadId: lastReadChapter,
+      lastReadId: lastReadId,
       userId: req.user._id
     });
     
+    console.log('📚 POST /bookmarks - Bookmark object before save:', bookmark);
+    
     await bookmark.save();
+    
+    console.log('📚 POST /bookmarks - Bookmark saved successfully:', bookmark);
     
     // Increment bookmarkCount in manga stats
     await Manga.findByIdAndUpdate(mangaId, {
@@ -83,32 +116,65 @@ router.post('/', async (req, res) => {
 });
 
 // Update bookmark progress
-router.put('/progress/:mangaId', async (req, res) => {
+router.put('/:mangaId/progress', async (req, res) => {
   try {
+    console.log('📚 PUT /progress/:mangaId - Request received');
+    console.log('📚 PUT /progress/:mangaId - Params:', req.params);
+    console.log('📚 PUT /progress/:mangaId - Body:', req.body);
+    console.log('📚 PUT /progress/:mangaId - User ID:', req.user._id);
+    console.log('📚 PUT /progress/:mangaId - User ID type:', typeof req.user._id);
+    console.log('📚 PUT /progress/:mangaId - Manga ID from params:', req.params.mangaId);
+    console.log('📚 PUT /progress/:mangaId - Manga ID type:', typeof req.params.mangaId);
+    
     const { lastReadId } = req.body;
     
-    const bookmark = await Bookmark.findOneAndUpdate(
-      { userId: req.user._id, mangaId: req.params.mangaId },
-      { lastReadId: lastReadId },
-      { new: true }
-    );
+    // Convert string IDs to ObjectIds for comparison
+    const userId = new mongoose.Types.ObjectId(req.user._id);
+    const mangaId = new mongoose.Types.ObjectId(req.params.mangaId);
     
-    if (!bookmark) {
+    console.log('📚 PUT /progress/:mangaId - Converted User ID:', userId);
+    console.log('📚 PUT /progress/:mangaId - Converted Manga ID:', mangaId);
+    
+    console.log('📚 PUT /progress/:mangaId - Looking for bookmark with criteria:', {
+      userId: userId,
+      mangaId: mangaId
+    });
+    
+    // First, let's check if the bookmark exists at all
+    const existingBookmark = await Bookmark.findOne({
+      userId: userId,
+      mangaId: mangaId
+    });
+    
+    console.log('📚 PUT /progress/:mangaId - Existing bookmark found:', existingBookmark);
+    
+    if (!existingBookmark) {
+      console.log('📚 PUT /progress/:mangaId - No bookmark found with findOne, returning 404');
       return res.status(404).json({
         success: false,
         message: 'Bookmark not found'
       });
     }
     
+    // Now update the bookmark
+    const bookmark = await Bookmark.findOneAndUpdate(
+      { userId: userId, mangaId: mangaId },
+      { lastReadId: lastReadId },
+      { new: true }
+    );
+    
+    console.log('📚 PUT /progress/:mangaId - Bookmark updated successfully:', bookmark);
+    
     res.json({
       success: true,
       data: bookmark
     });
   } catch (error) {
-    console.error('Error updating bookmark progress:', error);
+    console.error('📚 PUT /progress/:mangaId - Error:', error);
     res.status(500).json({
       success: false,
-      message: 'Failed to update bookmark progress'
+      message: 'Internal server error',
+      error: error.message
     });
   }
 });
