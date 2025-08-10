@@ -95,9 +95,13 @@ router.get('/:id', async (req, res) => {
       });
     }
     
-    // Increment views
-    manga.stats.views += 1;
-    await manga.save();
+    // Only increment views if not a refresh request (skipIncrement=true)
+    // This prevents double-counting when the frontend refreshes manga data
+    // after user actions like rating submission
+    if (!req.query.skipIncrement) {
+      manga.stats.views += 1;
+      await manga.save();
+    }
     
     res.json({
       success: true,
