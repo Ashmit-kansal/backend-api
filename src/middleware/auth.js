@@ -27,6 +27,12 @@ const auth = async (req, res, next) => {
     
     if (!user.lastActive || user.lastActive < oneDayAgo) {
       user.lastActive = new Date();
+      
+      // Ensure user has required fields before saving
+      if (!user.name) {
+        user.name = user.username || 'User';
+      }
+      
       await user.save();
     }
 

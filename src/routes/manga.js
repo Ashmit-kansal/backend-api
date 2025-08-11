@@ -28,7 +28,7 @@ router.get('/', async (req, res) => {
     const skip = (page - 1) * limit;
     
     const manga = await Manga.find(query)
-      .select('title coverImage genres status author description stats lastUpdated')
+      .select('title coverImage genres status author description stats lastUpdated slug')
       .sort({ lastUpdated: -1 })
       .skip(skip)
       .limit(parseInt(limit));

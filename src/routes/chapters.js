@@ -167,5 +167,81 @@ router.get('/latest', async (req, res) => {
   }
 });
 
+// Get chapter by manga slug and chapter number
+router.get('/manga/:slug/chapter/:chapterNumber', async (req, res) => {
+  try {
+    const { slug, chapterNumber } = req.params;
+    
+    // First find the manga by slug
+    const manga = await Manga.findOne({ slug });
+    if (!manga) {
+      return res.status(404).json({
+        success: false,
+        message: 'Manga not found'
+      });
+    }
+    
+    // Then find the chapter by manga ID and chapter number
+    const chapter = await Chapter.findOne({ 
+      mangaId: manga._id, 
+      chapterNumber: parseInt(chapterNumber) 
+    }).populate('mangaId', 'title slug');
+    
+    if (!chapter) {
+      return res.status(404).json({
+        success: false,
+        message: 'Chapter not found'
+      });
+    }
+    
+    // Increment views
+    chapter.views += 1;
+    await chapter.save();
+    
+    res.json({
+      success: true,
+      data: chapter
+    });
+  } catch (error) {
+    console.error('Error fetching chapter by slug and number:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch chapter'
+    });
+  }
+});
+
+// Get all chapters for a manga by slug
+router.get('/manga/:slug/chapters', async (req, res) => {
+  try {
+    const { sortBy = 'chapterNumber', order = 'asc' } = req.query;
+    const sortOrder = order === 'desc' ? -1 : 1;
+    
+    // First find the manga by slug
+    const manga = await Manga.findOne({ slug: req.params.slug });
+    if (!manga) {
+      return res.status(404).json({
+        success: false,
+        message: 'Manga not found'
+      });
+    }
+    
+    const chapters = await Chapter.find({ mangaId: manga._id })
+      .sort({ [sortBy]: sortOrder })
+      .populate('mangaId', 'title slug');
+    
+    res.json({
+      success: true,
+      data: chapters
+    });
+  } catch (error) {
+    console.error('Error fetching chapters by manga slug:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch chapters'
+    });
+  }
+});
+
 module.exports = router;
 
