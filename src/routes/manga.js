@@ -12,7 +12,27 @@ router.get('/', async (req, res) => {
     
     // Search functionality
     if (search) {
-      query.$text = { $search: search };
+      console.log('🔍 Text search query:', search);
+      
+      // Create a more flexible search query that handles special characters
+      // Use word boundaries to match only complete words, not partial matches
+      const searchWords = search.trim().split(/\s+/).filter(word => word.length >= 2);
+      const searchRegexes = searchWords.map(word => 
+        new RegExp(`\\b${word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i')
+      );
+      
+      // Use both text search and regex search for better results
+      query.$or = [
+        // Text search for exact matches
+        { $text: { $search: search } },
+        // Regex search for complete word matches
+        ...searchRegexes.map(regex => ({ title: regex })),
+        ...searchRegexes.map(regex => ({ alternativeTitles: regex })),
+        ...searchRegexes.map(regex => ({ author: regex })),
+        ...searchRegexes.map(regex => ({ description: regex }))
+      ];
+      
+      console.log('🔍 Enhanced search query with word boundaries:', JSON.stringify(query));
     }
     
     // Genre filter
@@ -27,11 +47,35 @@ router.get('/', async (req, res) => {
     
     const skip = (page - 1) * limit;
     
-    const manga = await Manga.find(query)
-      .select('title coverImage genres status author description stats lastUpdated slug')
-      .sort({ lastUpdated: -1 })
-      .skip(skip)
-      .limit(parseInt(limit));
+    let manga;
+    let sortOptions = {};
+    
+    if (search) {
+      // For enhanced search, use a combination of text score and relevance
+      manga = await Manga.find(query)
+        .select('title coverImage genres status author description stats lastUpdated slug alternativeTitles')
+        .sort({ 
+          // First by text score if available, then by relevance
+          score: { $meta: 'textScore' },
+          // Fallback sorting by title similarity
+          title: 1
+        })
+        .skip(skip)
+        .limit(5); // Limit to 5 results for search
+      
+      console.log(`🔍 Enhanced search found ${manga.length} results for: "${search}"`);
+      if (manga.length > 0) {
+        console.log('🔍 First result:', manga[0].title);
+        console.log('🔍 All results:', manga.map(m => m.title));
+      }
+    } else {
+      // For regular queries, sort by lastUpdated
+      manga = await Manga.find(query)
+        .select('title coverImage genres status author description stats lastUpdated slug alternativeTitles')
+        .sort({ lastUpdated: -1 })
+        .skip(skip)
+        .limit(parseInt(limit));
+    }
     
     const total = await Manga.countDocuments(query);
     

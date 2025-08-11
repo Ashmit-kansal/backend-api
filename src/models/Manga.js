@@ -76,7 +76,13 @@ const mangaSchema = new mongoose.Schema({
 });
 
 // Index for better search performance
-mangaSchema.index({ title: 'text', author: 'text', genres: 'text' });
+mangaSchema.index({ 
+  title: 'text', 
+  author: 'text', 
+  genres: 'text',
+  alternativeTitles: 'text',
+  description: 'text'
+});
 
 // Helper to create URL-friendly slugs
 function generateSlugFromTitle(title) {

@@ -28,27 +28,107 @@ router.get('/', async (req, res) => {
     console.log('🔍 GET /bookmarks - User ID:', req.user._id);
     console.log('🔍 GET /bookmarks - User object:', req.user);
     
-    const bookmarks = await Bookmark.find({ userId: req.user._id })
-      .populate('mangaId', 'title coverImage description genres status authors')
-      .populate('lastReadId', 'chapterNumber title')
-      .sort({ createdAt: -1 });
+    // Use aggregation pipeline to get bookmarks with latest chapters in a single query
+    const bookmarksWithLatestChapters = await Bookmark.aggregate([
+      // Match bookmarks for the current user
+      { $match: { userId: new mongoose.Types.ObjectId(req.user._id) } },
+      
+      // Sort by creation date (newest first)
+      { $sort: { createdAt: -1 } },
+      
+      // Lookup manga details
+      {
+        $lookup: {
+          from: 'mangas',
+          localField: 'mangaId',
+          foreignField: '_id',
+          as: 'mangaDetails'
+        }
+      },
+      
+      // Unwind manga details array
+      { $unwind: '$mangaDetails' },
+      
+      // Lookup last read chapter details
+      {
+        $lookup: {
+          from: 'chapters',
+          localField: 'lastReadId',
+          foreignField: '_id',
+          as: 'lastReadChapter'
+        }
+      },
+      
+      // Unwind last read chapter array (optional field)
+      { $unwind: { path: '$lastReadChapter', preserveNullAndEmptyArrays: true } },
+      
+      // Lookup latest chapter for each manga
+      {
+        $lookup: {
+          from: 'chapters',
+          let: { mangaId: '$mangaId' },
+          pipeline: [
+            { $match: { $expr: { $eq: ['$mangaId', '$$mangaId'] } } },
+            { $sort: { chapterNumber: -1 } },
+            { $limit: 1 },
+            { $project: { _id: 1, chapterNumber: 1, title: 1 } }
+          ],
+          as: 'latestChapter'
+        }
+      },
+      
+      // Unwind latest chapter array
+      { $unwind: { path: '$latestChapter', preserveNullAndEmptyArrays: true } },
+      
+      // Project the final structure
+      {
+        $project: {
+          _id: 1,
+          userId: 1,
+          createdAt: 1,
+          updatedAt: 1,
+          mangaId: {
+            _id: '$mangaDetails._id',
+            title: '$mangaDetails.title',
+            coverImage: '$mangaDetails.coverImage',
+            description: '$mangaDetails.description',
+            genres: '$mangaDetails.genres',
+            status: '$mangaDetails.status',
+            authors: '$mangaDetails.authors',
+            slug: '$mangaDetails.slug'
+          },
+          lastReadId: {
+            _id: '$lastReadChapter._id',
+            chapterNumber: '$lastReadChapter.chapterNumber',
+            title: '$lastReadChapter.title'
+          },
+          latestChapter: {
+            _id: '$latestChapter._id',
+            chapterNumber: '$latestChapter.chapterNumber',
+            title: '$latestChapter.title'
+          }
+        }
+      }
+    ]);
     
-    console.log('🔍 GET /bookmarks - Found bookmarks:', bookmarks);
-    console.log('🔍 GET /bookmarks - Bookmark count:', bookmarks.length);
+    console.log('🔍 GET /bookmarks - Found bookmarks:', bookmarksWithLatestChapters);
+    console.log('🔍 GET /bookmarks - Bookmark count:', bookmarksWithLatestChapters.length);
     
-    // Debug: Log each bookmark's mangaId for comparison
-    bookmarks.forEach((bookmark, index) => {
+    // Debug: Log each bookmark's structure
+    bookmarksWithLatestChapters.forEach((bookmark, index) => {
       console.log(`🔍 Bookmark ${index + 1}:`, {
         bookmarkId: bookmark._id,
         mangaId: bookmark.mangaId._id,
         mangaTitle: bookmark.mangaId.title,
-        userId: bookmark.userId
+        userId: bookmark.userId,
+        lastReadChapter: bookmark.lastReadId?.chapterNumber,
+        latestChapter: bookmark.latestChapter?.chapterNumber
       });
     });
     
     res.json({
       success: true,
-      data: bookmarks
+      data: bookmarksWithLatestChapters
     });
   } catch (error) {
     console.error('Error fetching bookmarks:', error);
@@ -82,13 +162,30 @@ router.post('/', async (req, res) => {
       });
     }
     
+    // Get chapter 1 for this manga to set as lastReadId
+    let chapter1 = null;
+    try {
+      chapter1 = await Chapter.findOne({ 
+        mangaId: mangaId,
+        chapterNumber: 1 
+      }).select('_id chapterNumber title');
+    } catch (error) {
+      console.error('Error finding chapter 1:', error);
+    }
+    
     const bookmark = new Bookmark({
       mangaId,
-      lastReadId: lastReadId,
+      lastReadId: chapter1 ? chapter1._id : (lastReadId || null), // Use chapter 1 if available, otherwise use provided lastReadId or null
       userId: req.user._id
     });
     
-    console.log('📚 POST /bookmarks - Bookmark object before save:', bookmark);
+    console.log('📚 POST /bookmarks - Bookmark object before save:', {
+      mangaId: bookmark.mangaId,
+      lastReadId: bookmark.lastReadId,
+      userId: bookmark.userId,
+      chapter1Found: !!chapter1,
+      chapter1Details: chapter1 ? { id: chapter1._id, number: chapter1.chapterNumber, title: chapter1.title } : null
+    });
     
     await bookmark.save();
     
@@ -100,7 +197,7 @@ router.post('/', async (req, res) => {
     });
     
     // Populate the manga details for the response
-    await bookmark.populate('mangaId', 'title coverImage description genres status authors');
+    await bookmark.populate('mangaId', 'title coverImage description genres');
     
     res.status(201).json({
       success: true,
