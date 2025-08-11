@@ -40,6 +40,7 @@ app.use('/api/chapters', require('./src/routes/chapters'));
 app.use('/api/trending', require('./src/routes/trending'));
 app.use('/api/genres', require('./src/routes/genres'));
 app.use('/api/bookmarks', require('./src/routes/bookmarks'));
+app.use('/api/manga-requests', require('./src/routes/mangaRequests'));
 
 // Health check endpoint
 app.get('/health', (req, res) => {

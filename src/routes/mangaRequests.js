@@ -1,0 +1,40 @@
+const express = require('express');
+const router = express.Router();
+const MangaRequest = require('../models/MangaRequest');
+
+// Submit a new manga request
+router.post('/', async (req, res) => {
+  try {
+    const { mangaTitle, description } = req.body;
+
+    // Basic validation
+    if (!mangaTitle || !description) {
+      return res.status(400).json({
+        success: false,
+        message: 'Manga title and description are required'
+      });
+    }
+
+    // Create the manga request
+    const mangaRequest = new MangaRequest({
+      mangaTitle,
+      description
+    });
+
+    await mangaRequest.save();
+
+    res.status(201).json({
+      success: true,
+      message: 'Manga request submitted successfully'
+    });
+
+  } catch (error) {
+    console.error('Error submitting manga request:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to submit manga request'
+    });
+  }
+});
+
+module.exports = router;

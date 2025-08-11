@@ -22,6 +22,14 @@ const auth = async (req, res, next) => {
       });
     }
 
+    // Update lastActive only if last update was more than 1 day ago
+    const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    
+    if (!user.lastActive || user.lastActive < oneDayAgo) {
+      user.lastActive = new Date();
+      await user.save();
+    }
+
     req.user = user;
     next();
   } catch (error) {
