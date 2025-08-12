@@ -40,11 +40,6 @@ const commentSchema = new mongoose.Schema({
       enum: ['likes', 'dislikes']
     }
   }],
-  parentCommentId: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Comment',
-    default: null
-  },
   isEdited: {
     type: Boolean,
     default: false
@@ -60,6 +55,5 @@ const commentSchema = new mongoose.Schema({
 // Indexes for efficient queries
 commentSchema.index({ mangaId: 1, createdAt: -1 });
 commentSchema.index({ userId: 1, createdAt: -1 });
-commentSchema.index({ parentCommentId: 1 });
 
 module.exports = mongoose.model('Comment', commentSchema); 
