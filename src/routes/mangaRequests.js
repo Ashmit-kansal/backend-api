@@ -1,9 +1,10 @@
 const express = require('express');
 const router = express.Router();
+const auth = require('../middleware/auth');
 const MangaRequest = require('../models/MangaRequest');
 
 // Submit a new manga request
-router.post('/', async (req, res) => {
+router.post('/', auth, async (req, res) => {
   try {
     const { mangaTitle, description } = req.body;
 
@@ -17,6 +18,8 @@ router.post('/', async (req, res) => {
 
     // Create the manga request
     const mangaRequest = new MangaRequest({
+      userId: req.user.id,
+      requester: req.user.id,
       mangaTitle,
       description
     });

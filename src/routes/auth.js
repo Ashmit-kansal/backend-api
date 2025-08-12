@@ -8,7 +8,7 @@ const User = require('../models/User');
 const Bookmark = require('../models/Bookmark');
 const Rating = require('../models/Rating');
 const Comment = require('../models/Comment');
-const Notification = require('../models/Notification');
+
 const ImageUploadService = require('../services/imageUploadService');
 const Manga = require('../models/Manga'); // Added Manga model import
 const OTP = require('../models/OTP');

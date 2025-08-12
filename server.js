@@ -32,7 +32,7 @@ mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/manga-rea
 
 // Routes
 app.use('/api/auth', require('./src/routes/auth'));
-app.use('/api/notifications', require('./src/routes/notifications'));
+
 app.use('/api/ratings', require('./src/routes/ratings'));
 app.use('/api/comments', require('./src/routes/comments'));
 app.use('/api/manga', require('./src/routes/manga'));

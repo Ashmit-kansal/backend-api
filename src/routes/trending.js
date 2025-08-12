@@ -76,15 +76,72 @@ router.get('/recent', async (req, res) => {
   }
 });
 
+// Test endpoint for pagination debugging
+router.get('/test-pagination', async (req, res) => {
+  try {
+    const { limit = 5, page = 1 } = req.query;
+    const parsedLimit = parseInt(limit);
+    const parsedPage = parseInt(page);
+    const skip = (parsedPage - 1) * parsedLimit;
+    
+    console.log('🧪 Test pagination:', { limit: parsedLimit, page: parsedPage, skip });
+    
+    // Simple find with skip and limit
+    const manga = await Manga.find()
+      .sort({ lastUpdated: -1 })
+      .skip(skip)
+      .limit(parsedLimit)
+      .select('title lastUpdated');
+    
+    const total = await Manga.countDocuments();
+    
+    console.log(`🧪 Test result: expected ${parsedLimit}, got ${manga.length}`);
+    
+    res.json({
+      success: true,
+      data: manga,
+      pagination: {
+        currentPage: parsedPage,
+        totalPages: Math.ceil(total / parsedLimit),
+        totalItems: total,
+        itemsPerPage: parsedLimit
+      }
+    });
+  } catch (error) {
+    console.error('Error in test pagination:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to test pagination'
+    });
+  }
+});
+
 // Get recent manga with last 3 chapters using aggregation
 router.get('/recent-with-chapters', async (req, res) => {
   try {
     const { limit = 15, page = 1 } = req.query;
-    const skip = (parseInt(page) - 1) * parseInt(limit);
+    const parsedLimit = parseInt(limit);
+    const parsedPage = parseInt(page);
+    const skip = (parsedPage - 1) * parsedLimit;
     
-    console.log('🔍 Fetching recent manga with chapters using aggregation:', { limit, page, skip });
+    console.log('🔍 Raw query parameters:', req.query);
+    console.log('🔍 Parsed parameters:', { limit: parsedLimit, page: parsedPage, skip });
+    console.log('🔍 Fetching recent manga with chapters using aggregation:', { limit: parsedLimit, page: parsedPage, skip });
     
     // Use aggregation pipeline to get manga with their last 3 chapters
+    console.log('🔍 Starting aggregation pipeline...');
+    
+    // First, let's test with a simple approach to see if pagination works
+    console.log('🧪 Testing simple pagination first...');
+    const simpleManga = await Manga.find()
+      .sort({ lastUpdated: -1 })
+      .skip(skip)
+      .limit(parsedLimit)
+      .select('title lastUpdated');
+    
+    console.log(`🧪 Simple pagination result: expected ${parsedLimit}, got ${simpleManga.length}`);
+    
+    // Now try the full aggregation pipeline
     const mangaWithChapters = await Manga.aggregate([
       // Stage 1: Sort manga by lastUpdated (most recent first)
       {
@@ -96,7 +153,7 @@ router.get('/recent-with-chapters', async (req, res) => {
       },
       // Stage 3: Limit results
       {
-        $limit: parseInt(limit)
+        $limit: parsedLimit
       },
       // Stage 4: Lookup chapters for each manga
       {
@@ -148,19 +205,24 @@ router.get('/recent-with-chapters', async (req, res) => {
       }
     ]);
     
+    console.log('🔍 Aggregation pipeline completed');
+    console.log(`🔍 Aggregation result: expected ${parsedLimit}, got ${mangaWithChapters.length}`);
+    
     // Get total count for pagination
     const total = await Manga.countDocuments();
     
     console.log(`✅ Successfully fetched ${mangaWithChapters.length} manga with chapters`);
+    console.log(`📊 Pagination details: total=${total}, limit=${parsedLimit}, page=${parsedPage}, skip=${skip}`);
+    console.log(`📊 Expected items: ${parsedLimit}, Actual items returned: ${mangaWithChapters.length}`);
     
     res.json({
       success: true,
       data: mangaWithChapters,
       pagination: {
-        currentPage: parseInt(page),
-        totalPages: Math.ceil(total / parseInt(limit)),
+        currentPage: parsedPage,
+        totalPages: Math.ceil(total / parsedLimit),
         totalItems: total,
-        itemsPerPage: parseInt(limit)
+        itemsPerPage: parsedLimit
       }
     });
   } catch (error) {

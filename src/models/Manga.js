@@ -12,18 +12,9 @@ const mangaSchema = new mongoose.Schema({
     required: true,
     trim: true
   },
-  author: {
-    type: String,
-    default: 'Unknown Author',
-    trim: true
-  },
   description: {
     type: String,
     default: 'No description available.'
-  },
-  summary: {
-    type: String,
-    default: 'No summary available.'
   },
   coverImage: {
     type: String,
@@ -78,7 +69,6 @@ const mangaSchema = new mongoose.Schema({
 // Index for better search performance
 mangaSchema.index({ 
   title: 'text', 
-  author: 'text', 
   genres: 'text',
   alternativeTitles: 'text',
   description: 'text'
