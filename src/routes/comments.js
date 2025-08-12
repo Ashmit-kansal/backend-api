@@ -138,6 +138,23 @@ router.post('/', auth, async (req, res) => {
     const { mangaId, chapterId, content, containsSpoilers } = req.body;
     const userId = req.user.id;
 
+    // Check if user is banned
+    const user = await require('../models/User').findById(userId);
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    if (user.isBanned) {
+      return res.status(403).json({
+        success: false,
+        message: 'Your account has been banned. You cannot post comments.',
+        banReason: user.banReason || 'No reason provided'
+      });
+    }
+
     if (!mangaId || !content || content.trim().length === 0) {
       return res.status(400).json({
         success: false,
@@ -178,6 +195,23 @@ router.put('/:id', auth, async (req, res) => {
     const { id } = req.params;
     const { content, containsSpoilers } = req.body;
     const userId = req.user.id;
+
+    // Check if user is banned
+    const user = await require('../models/User').findById(userId);
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    if (user.isBanned) {
+      return res.status(403).json({
+        success: false,
+        message: 'Your account has been banned. You cannot edit comments.',
+        banReason: user.banReason || 'No reason provided'
+      });
+    }
 
     if (!content || content.trim().length === 0) {
       return res.status(400).json({
@@ -257,6 +291,23 @@ router.post('/:id/reactions', auth, async (req, res) => {
     const { id } = req.params;
     const { reactionType } = req.body;
     const userId = req.user.id;
+
+    // Check if user is banned
+    const user = await require('../models/User').findById(userId);
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    if (user.isBanned) {
+      return res.status(403).json({
+        success: false,
+        message: 'Your account has been banned. You cannot react to comments.',
+        banReason: user.banReason || 'No reason provided'
+      });
+    }
 
     console.log('Reaction submission:', { commentId: id, reactionType, userId });
 

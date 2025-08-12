@@ -43,41 +43,66 @@ const userSchema = new mongoose.Schema({
   },
   role: {
     type: String,
-    enum: ['user', 'admin'],
+    enum: ['user', 'admin', 'moderator'],
     default: 'user'
   },
   isActive: {
     type: Boolean,
     default: true
   },
-  lastActive: {
-    type: Date,
-    default: Date.now
-  },
-  isEmailVerified: {
+  isBanned: {
     type: Boolean,
     default: false
   },
-  emailVerificationToken: {
+  banReason: {
     type: String,
     default: null
+  },
+  bannedAt: {
+    type: Date,
+    default: null
+  },
+  lastActive: {
+    type: Date,
+    default: Date.now
   }
 }, {
   timestamps: true
 });
 
+// Index for better query performance
+userSchema.index({ email: 1 });
+userSchema.index({ username: 1 });
+userSchema.index({ role: 1 });
+userSchema.index({ isActive: 1 });
+
+// Static method to find active users only
+userSchema.statics.findActive = function() {
+  return this.find({ 
+    isActive: true
+  });
+};
+
+// Static method to find admin users only
+userSchema.statics.findAdmins = function() {
+  return this.find({ 
+    role: 'admin',
+    isActive: true
+  });
+};
+
 // Hash password before saving
-userSchema.pre('save', async function(next) {
-  if (!this.isModified('password')) return next();
-  
-  try {
-    const salt = await bcrypt.genSalt(10);
-    this.password = await bcrypt.hash(this.password, salt);
-    next();
-  } catch (error) {
-    next(error);
-  }
-});
+// userSchema.pre('save', async function(next) {
+//   if (!this.isModified('password')) return next();
+//   
+//   try {
+//     const salt = await bcrypt.genSalt(10);
+//     this.password = await bcrypt.hash(this.password, salt);
+//     next();
+//   } catch (error) {
+//     next(error);
+//   }
+// });
 
 // Compare password method
 userSchema.methods.comparePassword = async function(candidatePassword) {

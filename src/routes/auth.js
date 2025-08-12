@@ -156,8 +156,12 @@ router.post('/login', async (req, res) => {
   try {
     const { email, password } = req.body;
 
+    console.log('🔐 Login attempt:', { email, hasPassword: !!password });
+
     // Find user
     const user = await User.findOne({ email });
+    console.log('👤 User lookup result:', user ? { id: user._id, username: user.username, email: user.email } : 'User not found');
+    
     if (!user) {
       return res.status(400).json({
         success: false,
@@ -167,6 +171,8 @@ router.post('/login', async (req, res) => {
 
     // Check password
     const isMatch = await bcrypt.compare(password, user.password);
+    console.log('🔑 Password check result:', isMatch);
+    
     if (!isMatch) {
       return res.status(400).json({
         success: false,
@@ -392,7 +398,8 @@ router.delete('/delete-account', auth, async (req, res) => {
     }
 
     // Soft delete: Update user data instead of deleting
-    const deletedId = `deleted_${user._id}`;
+    // Use a shorter format to fit within username maxlength (30 characters)
+    const deletedId = `del_${user._id.toString().slice(-12)}`; // del_ + last 12 chars of ObjectId
     
     // Update user to soft deleted state
     user.username = deletedId;
@@ -697,7 +704,9 @@ router.post('/reset-password', async (req, res) => {
       });
     }
 
-    user.password = newPassword;
+    // Hash the new password before saving
+    const salt = await bcrypt.genSalt(10);
+    user.password = await bcrypt.hash(newPassword, salt);
     await user.save();
 
     res.json({
