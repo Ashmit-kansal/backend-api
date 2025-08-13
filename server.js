@@ -26,13 +26,24 @@ app.use(helmet({
   crossOriginResourcePolicy: { policy: "cross-origin" }
 }));
 
-// Rate limiting
+// Rate limiting - different limits for authenticated vs unauthenticated users
 const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // limit each IP to 100 requests per windowMs
+  windowMs: 1 * 60 * 1000, // 1 minute
+  max: (req) => {
+    // If user is authenticated, allow 400 requests per minute
+    // If not authenticated, allow 300 requests per minute
+    return req.user ? 400 : 300;
+  },
+  keyGenerator: (req) => {
+    // Use user ID if authenticated, fallback to IP for unauthenticated
+    return req.user ? req.user._id : req.ip;
+  },
   message: {
     success: false,
-    message: 'Too many requests from this IP, please try again later.'
+    message: (req) => {
+      const limit = req.user ? 400 : 300;
+      return `Rate limit exceeded. ${req.user ? 'Authenticated users' : 'Unauthenticated users'} are limited to ${limit} requests per minute.`;
+    }
   },
   standardHeaders: true,
   legacyHeaders: false,
@@ -43,8 +54,8 @@ app.use('/api/', limiter);
 
 // Stricter rate limiting for auth routes
 const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 5, // limit each IP to 5 requests per windowMs
+  windowMs: 1 * 60 * 1000, // 1 minute
+  max: 50, // limit each IP to 50 requests per minute
   message: {
     success: false,
     message: 'Too many authentication attempts, please try again later.'
