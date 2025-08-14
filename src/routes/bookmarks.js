@@ -28,18 +28,21 @@ router.get('/', async (req, res) => {
     console.log('🔍 GET /bookmarks - User ID:', req.user._id);
     console.log('🔍 GET /bookmarks - User object:', req.user);
     
+    // Debug: Check collection names
+    console.log('🔍 Collection names:');
+    console.log('  - Bookmark collection:', Bookmark.collection.name);
+    console.log('  - Manga collection:', Manga.collection.name);
+    console.log('  - Chapter collection:', Chapter.collection.name);
+    
     // Use aggregation pipeline to get bookmarks with latest chapters in a single query
     const bookmarksWithLatestChapters = await Bookmark.aggregate([
       // Match bookmarks for the current user
       { $match: { userId: new mongoose.Types.ObjectId(req.user._id) } },
       
-      // Sort by creation date (newest first)
-      { $sort: { createdAt: -1 } },
-      
       // Lookup manga details
       {
         $lookup: {
-          from: 'mangas',
+          from: Manga.collection.name,
           localField: 'mangaId',
           foreignField: '_id',
           as: 'mangaDetails'
@@ -52,7 +55,7 @@ router.get('/', async (req, res) => {
       // Lookup last read chapter details
       {
         $lookup: {
-          from: 'chapters',
+          from: Chapter.collection.name,
           localField: 'lastReadId',
           foreignField: '_id',
           as: 'lastReadChapter'
@@ -65,7 +68,7 @@ router.get('/', async (req, res) => {
       // Lookup latest chapter for each manga
       {
         $lookup: {
-          from: 'chapters',
+          from: Chapter.collection.name,
           let: { mangaId: '$mangaId' },
           pipeline: [
             { $match: { $expr: { $eq: ['$mangaId', '$$mangaId'] } } },
@@ -80,6 +83,33 @@ router.get('/', async (req, res) => {
       // Unwind latest chapter array
       { $unwind: { path: '$latestChapter', preserveNullAndEmptyArrays: true } },
       
+      // Add reading progress field for sorting
+      {
+        $addFields: {
+          readingProgress: {
+            $cond: {
+              if: { 
+                $and: [
+                  { $ne: ['$lastReadChapter', null] },
+                  { $ne: ['$latestChapter', null] },
+                  { $gt: ['$latestChapter.chapterNumber', 0] }
+                ]
+              },
+              then: {
+                $divide: [
+                  '$lastReadChapter.chapterNumber',
+                  '$latestChapter.chapterNumber'
+                ]
+              },
+              else: 0
+            }
+          }
+        }
+      },
+      
+      // Sort by reading progress (highest first), then by creation date for ties
+      { $sort: { readingProgress: -1, createdAt: -1 } },
+      
       // Project the final structure
       {
         $project: {
@@ -87,6 +117,7 @@ router.get('/', async (req, res) => {
           userId: 1,
           createdAt: 1,
           updatedAt: 1,
+          readingProgress: 1,
           mangaId: {
             _id: '$mangaDetails._id',
             title: '$mangaDetails.title',
@@ -122,7 +153,8 @@ router.get('/', async (req, res) => {
         mangaTitle: bookmark.mangaId.title,
         userId: bookmark.userId,
         lastReadChapter: bookmark.lastReadId?.chapterNumber,
-        latestChapter: bookmark.latestChapter?.chapterNumber
+        latestChapter: bookmark.latestChapter?.chapterNumber,
+        readingProgress: bookmark.readingProgress ? `${(bookmark.readingProgress * 100).toFixed(1)}%` : 'N/A'
       });
     });
     
@@ -162,20 +194,25 @@ router.post('/', async (req, res) => {
       });
     }
     
-    // Get chapter 1 for this manga to set as lastReadId
-    let chapter1 = null;
+    // Get the lowest chapter number for this manga to set as lastReadId
+    let firstChapter = null;
     try {
-      chapter1 = await Chapter.findOne({ 
-        mangaId: mangaId,
-        chapterNumber: 1 
-      }).select('_id chapterNumber title');
+      // Debug: Check what chapters exist for this manga
+      const allChapters = await Chapter.find({ mangaId: mangaId }).select('_id chapterNumber title').sort({ chapterNumber: 1 });
+      console.log('🔍 All chapters for manga:', mangaId, ':', allChapters.map(ch => ({ id: ch._id, number: ch.chapterNumber, title: ch.title })));
+      
+      firstChapter = await Chapter.findOne({ 
+        mangaId: mangaId
+      }).sort({ chapterNumber: 1 }).select('_id chapterNumber title');
+      
+      console.log('🔍 First chapter found:', firstChapter ? { id: firstChapter._id, number: firstChapter.chapterNumber, title: firstChapter.title } : 'None');
     } catch (error) {
-      console.error('Error finding chapter 1:', error);
+      console.error('Error finding first chapter:', error);
     }
     
     const bookmark = new Bookmark({
       mangaId,
-      lastReadId: chapter1 ? chapter1._id : (lastReadId || null), // Use chapter 1 if available, otherwise use provided lastReadId or null
+      lastReadId: firstChapter ? firstChapter._id : (lastReadId || null), // Use lowest chapter if available, otherwise use provided lastReadId or null
       userId: req.user._id
     });
     
@@ -183,8 +220,8 @@ router.post('/', async (req, res) => {
       mangaId: bookmark.mangaId,
       lastReadId: bookmark.lastReadId,
       userId: bookmark.userId,
-      chapter1Found: !!chapter1,
-      chapter1Details: chapter1 ? { id: chapter1._id, number: chapter1.chapterNumber, title: chapter1.title } : null
+      firstChapterFound: !!firstChapter,
+      firstChapterDetails: firstChapter ? { id: firstChapter._id, number: firstChapter.chapterNumber, title: firstChapter.title } : null
     });
     
     await bookmark.save();
@@ -261,6 +298,12 @@ router.put('/:mangaId/progress', async (req, res) => {
     );
     
     console.log('📚 PUT /progress/:mangaId - Bookmark updated successfully:', bookmark);
+    console.log('📚 PUT /progress/:mangaId - Updated lastReadId:', bookmark.lastReadId);
+    
+    // Verify the update by fetching the bookmark again
+    const verifyBookmark = await Bookmark.findById(bookmark._id).populate('lastReadId');
+    console.log('📚 PUT /progress/:mangaId - Verification - Bookmark:', verifyBookmark);
+    console.log('📚 PUT /progress/:mangaId - Verification - lastReadId populated:', verifyBookmark.lastReadId);
     
     res.json({
       success: true,
