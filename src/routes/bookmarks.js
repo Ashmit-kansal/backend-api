@@ -181,6 +181,24 @@ router.post('/', async (req, res) => {
     
     console.log('📚 POST /bookmarks - Extracted data:', { mangaId, lastReadId });
     
+    // Validate required fields
+    if (!mangaId) {
+      console.error('❌ POST /bookmarks - mangaId is missing or null');
+      return res.status(400).json({
+        success: false,
+        message: 'mangaId is required'
+      });
+    }
+    
+    // Validate mangaId format
+    if (!mongoose.Types.ObjectId.isValid(mangaId)) {
+      console.error('❌ POST /bookmarks - Invalid mangaId format:', mangaId);
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid mangaId format'
+      });
+    }
+    
     // Check if bookmark already exists
     const existingBookmark = await Bookmark.findOne({ 
       userId: req.user._id, 
@@ -234,11 +252,23 @@ router.post('/', async (req, res) => {
     });
     
     // Populate the manga details for the response
-    await bookmark.populate('mangaId', 'title coverImage description genres');
+    await bookmark.populate('mangaId', 'title coverImage description genres authors slug');
+    
+    // Ensure the response has the correct structure
+    const responseData = {
+      _id: bookmark._id,
+      userId: bookmark.userId,
+      mangaId: bookmark.mangaId,
+      lastReadId: bookmark.lastReadId,
+      createdAt: bookmark.createdAt,
+      updatedAt: bookmark.updatedAt
+    };
+    
+    console.log('📚 POST /bookmarks - Final response data:', responseData);
     
     res.status(201).json({
       success: true,
-      data: bookmark
+      data: responseData
     });
   } catch (error) {
     console.error('Error creating bookmark:', error);
