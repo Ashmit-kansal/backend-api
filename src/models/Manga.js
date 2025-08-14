@@ -71,7 +71,17 @@ mangaSchema.index({
   title: 'text', 
   genres: 'text',
   alternativeTitles: 'text',
-  description: 'text'
+  description: 'text',
+  author: 'text'
+}, {
+  weights: {
+    title: 10,
+    alternativeTitles: 8,
+    author: 6,
+    genres: 4,
+    description: 2
+  },
+  name: "manga_text_search"
 });
 
 // Helper to create URL-friendly slugs
