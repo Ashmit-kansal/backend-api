@@ -1,32 +1,61 @@
 const express = require('express');
 const router = express.Router();
 const Manga = require('../models/Manga');
+const Genre = require('../models/Genre');
 
 // Get all genres
 router.get('/', async (req, res) => {
   try {
     const { limit = 50, featured = false } = req.query;
     
-    // Get all unique genres from manga
-    const manga = await Manga.find({}, 'genres');
-    const allGenres = manga.reduce((acc, manga) => {
-      if (manga.genres && Array.isArray(manga.genres)) {
-        acc.push(...manga.genres);
-      }
-      return acc;
-    }, []);
+    // First try to get genres from the Genre model
+    let genres = await Genre.find({ isActive: true })
+      .select('name displayName color slug mangaIds isActive')
+      .sort({ displayName: 1 })
+      .limit(parseInt(limit));
     
-    // Get unique genres and count
-    const genreCounts = {};
-    allGenres.forEach(genre => {
-      genreCounts[genre] = (genreCounts[genre] || 0) + 1;
-    });
-    
-    // Convert to array and sort by count
-    const genres = Object.entries(genreCounts)
-      .map(([name, count]) => ({ name, count }))
-      .sort((a, b) => b.count - a.count)
-      .slice(0, parseInt(limit));
+    // If no genres found in Genre model, fallback to extracting from Manga
+    if (!genres || genres.length === 0) {
+      console.log('No genres found in Genre model, falling back to Manga extraction');
+      
+      const manga = await Manga.find({}, 'genres');
+      const allGenres = manga.reduce((acc, manga) => {
+        if (manga.genres && Array.isArray(manga.genres)) {
+          acc.push(...manga.genres);
+        }
+        return acc;
+      }, []);
+      
+      // Get unique genres and count
+      const genreCounts = {};
+      allGenres.forEach(genre => {
+        genreCounts[genre] = (genreCounts[genre] || 0) + 1;
+      });
+      
+      // Convert to array and sort by count
+      genres = Object.entries(genreCounts)
+        .map(([name, count]) => ({ 
+          name, 
+          displayName: name.charAt(0).toUpperCase() + name.slice(1),
+          count,
+          color: '#8b5cf6' // Default color for fallback genres
+        }))
+        .sort((a, b) => b.count - a.count)
+        .slice(0, parseInt(limit));
+    } else {
+      // Transform Genre model data to include count
+      genres = genres.map(genre => ({
+        name: genre.name,
+        displayName: genre.displayName,
+        color: genre.color,
+        slug: genre.slug,
+        count: genre.mangaIds ? genre.mangaIds.length : 0,
+        isActive: genre.isActive
+      }));
+      
+      // Sort by count if not already sorted
+      genres.sort((a, b) => b.count - a.count);
+    }
     
     res.json({
       success: true,
@@ -74,6 +103,43 @@ router.get('/:genre/manga', async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Failed to fetch manga by genre'
+    });
+  }
+});
+
+// Get specific genre by slug
+router.get('/:slug', async (req, res) => {
+  try {
+    const genre = await Genre.findOne({ 
+      slug: req.params.slug,
+      isActive: true 
+    }).select('name displayName color slug mangaIds isActive createdAt updatedAt');
+    
+    if (!genre) {
+      return res.status(404).json({
+        success: false,
+        message: 'Genre not found'
+      });
+    }
+    
+    res.json({
+      success: true,
+      data: {
+        name: genre.name,
+        displayName: genre.displayName,
+        color: genre.color,
+        slug: genre.slug,
+        mangaCount: genre.mangaIds ? genre.mangaIds.length : 0,
+        isActive: genre.isActive,
+        createdAt: genre.createdAt,
+        updatedAt: genre.updatedAt
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching genre:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch genre'
     });
   }
 });
