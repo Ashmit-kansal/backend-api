@@ -154,7 +154,9 @@ router.post('/verify-email', async (req, res) => {
           id: user._id,
           username: user.username,
           email: user.email,
-          avatar: user.avatar
+          avatar: user.avatar,
+          createdAt: user.createdAt,
+          name: user.name
         }
       }
     });
@@ -211,7 +213,9 @@ router.post('/login', async (req, res) => {
           id: user._id,
           username: user.username,
           email: user.email,
-          avatar: user.avatar
+          avatar: user.avatar,
+          createdAt: user.createdAt,
+          name: user.name
         }
       }
     });
