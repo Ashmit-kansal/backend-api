@@ -40,6 +40,14 @@ router.post('/register', async (req, res) => {
     });
 
     if (existingUser) {
+      // Check if existing user is banned
+      if (existingUser.isBanned) {
+        return res.status(400).json({
+          success: false,
+          message: 'This email or username is associated with a banned account. Registration not allowed.'
+        });
+      }
+
       return res.status(400).json({
         success: false,
         message: 'User already exists'
@@ -95,6 +103,14 @@ router.post('/verify-email', async (req, res) => {
     });
 
     if (existingUser) {
+      // Check if existing user is banned
+      if (existingUser.isBanned) {
+        return res.status(400).json({
+          success: false,
+          message: 'This email or username is associated with a banned account. Registration not allowed.'
+        });
+      }
+
       return res.status(400).json({
         success: false,
         message: 'User already exists'
@@ -403,7 +419,16 @@ router.delete('/delete-account', auth, async (req, res) => {
     
     // Update user to soft deleted state
     user.username = deletedId;
-    user.email = deletedId;
+    
+    // Preserve email if user is banned to prevent account recreation
+    if (user.isBanned) {
+      // Keep original email to prevent banned users from recreating accounts
+      console.log('User is banned, preserving email to prevent account recreation');
+    } else {
+      // Only change email for non-banned users
+      user.email = deletedId;
+    }
+    
     user.password = 'deleted'; // Set a dummy password
     user.avatar = null;
     user.avatarPublicId = null;
