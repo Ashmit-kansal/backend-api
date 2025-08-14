@@ -50,7 +50,7 @@ router.get('/:genre/manga', async (req, res) => {
     const manga = await Manga.find({
       genres: { $in: [req.params.genre] }
     })
-    .select('title coverImage genres status author description stats lastUpdated')
+    .select('_id slug title coverImage genres status authors description stats lastUpdated')
     .sort({ lastUpdated: -1 })
     .skip(skip)
     .limit(parseInt(limit));

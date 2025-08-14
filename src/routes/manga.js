@@ -291,7 +291,7 @@ router.get('/', async (req, res) => {
     if (search) {
       // For search queries, use intelligent sorting based on relevance
       const allResults = await Manga.find(query)
-        .select('title coverImage genres status author description stats lastUpdated slug alternativeTitles')
+        .select('_id slug title coverImage genres status authors description stats lastUpdated alternativeTitles')
         .limit(20); // Get more results for better sorting
       
       // Sort results by relevance score
@@ -329,7 +329,7 @@ router.get('/', async (req, res) => {
     } else {
       // For regular queries, sort by lastUpdated
       manga = await Manga.find(query)
-        .select('title coverImage genres status author description stats lastUpdated slug alternativeTitles')
+        .select('_id slug title coverImage genres status authors description stats lastUpdated alternativeTitles')
         .sort({ lastUpdated: -1 })
         .skip(skip)
         .limit(parseInt(limit));
@@ -504,7 +504,7 @@ router.get('/genre/:genre', async (req, res) => {
     const manga = await Manga.find({
       genres: { $in: [req.params.genre] }
     })
-    .select('title coverImage genres status author description stats lastUpdated')
+    .select('_id slug title coverImage genres status authors description stats lastUpdated')
     .sort({ lastUpdated: -1 })
     .skip(skip)
     .limit(parseInt(limit));

@@ -18,7 +18,7 @@ router.get('/top-rated', async (req, res) => {
     console.log('🔍 Database stats:', { totalManga, mangaWithRatings, mangaWithoutRatings });
     
     let manga = await Manga.find({ 'stats.totalRatings': { $gt: 0 } })
-      .select('title coverImage genres status author description stats lastUpdated')
+      .select('_id slug title coverImage genres status authors description stats lastUpdated')
       .sort({ 'stats.averageRating': -1, 'stats.totalRatings': -1 })
       .limit(parseInt(limit));
     
@@ -26,7 +26,7 @@ router.get('/top-rated', async (req, res) => {
     if (manga.length === 0) {
       console.log('🔍 No manga with ratings found, falling back to all manga');
       manga = await Manga.find()
-        .select('title coverImage genres status author description stats lastUpdated')
+        .select('_id slug title coverImage genres status authors description stats lastUpdated')
         .sort({ lastUpdated: -1 })
         .limit(parseInt(limit));
     }
@@ -59,7 +59,7 @@ router.get('/recent', async (req, res) => {
     const { limit = 20 } = req.query;
     
     const manga = await Manga.find()
-      .select('title coverImage genres status author description stats lastUpdated')
+      .select('_id slug title coverImage genres status authors description stats lastUpdated')
       .sort({ lastUpdated: -1 })
       .limit(parseInt(limit));
     

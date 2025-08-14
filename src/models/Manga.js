@@ -24,6 +24,10 @@ const mangaSchema = new mongoose.Schema({
     type: String,
     trim: true
   }],
+  authors: [{
+    type: String,
+    trim: true
+  }],
   status: {
     type: String,
     enum: ['Ongoing', 'Completed', 'Hiatus', 'Cancelled'],
@@ -72,12 +76,12 @@ mangaSchema.index({
   genres: 'text',
   alternativeTitles: 'text',
   description: 'text',
-  author: 'text'
+  authors: 'text'
 }, {
   weights: {
     title: 10,
     alternativeTitles: 8,
-    author: 6,
+    authors: 6,
     genres: 4,
     description: 2
   },
