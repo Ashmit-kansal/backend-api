@@ -368,13 +368,24 @@ router.get('/slug/:slug', async (req, res) => {
       });
     }
     
+    // Fetch chapters for this manga
+    const chapters = await Chapter.find({ mangaId: manga._id })
+      .select('_id chapterNumber title publishedAt views')
+      .sort({ chapterNumber: 1 });
+    
+    // Create manga data with chapters included
+    const mangaWithChapters = {
+      ...manga.toObject(),
+      chapters: chapters
+    };
+    
     // Increment views
     manga.stats.views += 1;
     await manga.save();
     
     res.json({
       success: true,
-      data: manga
+      data: mangaWithChapters
     });
   } catch (error) {
     console.error('Error fetching manga by slug:', error);
@@ -397,6 +408,17 @@ router.get('/:id', async (req, res) => {
       });
     }
     
+    // Fetch chapters for this manga
+    const chapters = await Chapter.find({ mangaId: manga._id })
+      .select('_id chapterNumber title publishedAt views')
+      .sort({ chapterNumber: 1 });
+    
+    // Create manga data with chapters included
+    const mangaWithChapters = {
+      ...manga.toObject(),
+      chapters: chapters
+    };
+    
     // Only increment views if not a refresh request (skipIncrement=true)
     // This prevents double-counting when the frontend refreshes manga data
     // after user actions like rating submission
@@ -407,7 +429,7 @@ router.get('/:id', async (req, res) => {
     
     res.json({
       success: true,
-      data: manga
+      data: mangaWithChapters
     });
   } catch (error) {
     console.error('Error fetching manga by ID:', error);
