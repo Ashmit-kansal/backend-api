@@ -76,8 +76,11 @@ app.use(cors({
       return callback(null, true);
     }
     
+    // Clean up FRONTEND_URL by removing trailing slash
+    const frontendUrl = process.env.FRONTEND_URL ? process.env.FRONTEND_URL.replace(/\/$/, '') : 'http://localhost:3000';
+    
     const allowedOrigins = [
-      process.env.FRONTEND_URL || 'http://localhost:3000',
+      frontendUrl,
       'http://localhost:3001',
       'http://localhost:3002'
     ];
@@ -85,7 +88,8 @@ app.use(cors({
     logger.info('CORS check', { 
       origin, 
       allowedOrigins: allowedOrigins.join(', '),
-      frontendUrl: process.env.FRONTEND_URL 
+      frontendUrl: process.env.FRONTEND_URL,
+      cleanedFrontendUrl: frontendUrl
     });
     
     if (allowedOrigins.indexOf(origin) !== -1) {
@@ -116,7 +120,18 @@ app.use((req, res, next) => {
   // Handle preflight OPTIONS request explicitly
   if (req.method === 'OPTIONS') {
     logger.info('Handling OPTIONS preflight request');
-    res.header('Access-Control-Allow-Origin', req.get('Origin') || 'http://localhost:3000');
+    const origin = req.get('Origin');
+    const frontendUrl = process.env.FRONTEND_URL ? process.env.FRONTEND_URL.replace(/\/$/, '') : 'http://localhost:3000';
+    
+    // Allow the origin if it matches our frontend URL
+    if (origin && (origin === frontendUrl || origin.startsWith('http://localhost:'))) {
+      res.header('Access-Control-Allow-Origin', origin);
+      logger.info('OPTIONS preflight - Origin allowed', { origin, frontendUrl });
+    } else {
+      res.header('Access-Control-Allow-Origin', frontendUrl);
+      logger.info('OPTIONS preflight - Using default origin', { origin, frontendUrl });
+    }
+    
     res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
     res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
     res.header('Access-Control-Allow-Credentials', 'true');
