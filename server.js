@@ -143,6 +143,13 @@ app.use((req, res, next) => {
 
 // Database connection
 logger.info('Attempting to connect to MongoDB');
+logger.info('Environment check', {
+  nodeEnv: process.env.NODE_ENV,
+  port: process.env.PORT,
+  mongoUri: process.env.MONGODB_URI ? 'Set' : 'Not set',
+  frontendUrl: process.env.FRONTEND_URL || 'Not set'
+});
+
 mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/manga-reader', {
   useNewUrlParser: true,
   useUnifiedTopology: true,
@@ -179,10 +186,28 @@ app.use('/api/error-reports', require('./src/routes/errorReports'));
 
 // Health check endpoint
 app.get('/health', (req, res) => {
-  res.json({ 
-    status: 'OK', 
+  const healthCheck = {
+    status: 'OK',
     timestamp: new Date().toISOString(),
-    uptime: process.uptime()
+    uptime: process.uptime(),
+    environment: process.env.NODE_ENV,
+    port: process.env.PORT,
+    mongoConnected: mongoose.connection.readyState === 1,
+    mongoState: mongoose.connection.readyState
+  };
+  
+  logger.info('Health check requested', healthCheck);
+  
+  // Return 200 for Railway health check
+  res.status(200).json(healthCheck);
+});
+
+// Additional health check for Railway
+app.get('/', (req, res) => {
+  res.json({ 
+    message: 'Manga Reader API is running',
+    status: 'OK',
+    timestamp: new Date().toISOString()
   });
 });
 
@@ -228,6 +253,13 @@ app.use('*', (req, res) => {
 });
 
 const PORT = process.env.PORT || 3004;
+
+// Log the port being used
+logger.info('Server configuration', { 
+  port: PORT, 
+  nodeEnv: process.env.NODE_ENV,
+  mongoUri: process.env.MONGODB_URI ? 'Set' : 'Not set'
+});
 
 // Start server function
 function startServer() {
