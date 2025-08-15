@@ -34,7 +34,7 @@ router.get('/', async (req, res) => {
     console.log('  - Manga collection:', Manga.collection.name);
     console.log('  - Chapter collection:', Chapter.collection.name);
     
-    // Use aggregation pipeline to get bookmarks with latest chapters in a single query
+    // Use aggregation pipeline to get bookmarks with latest chapters and full chapter list
     const bookmarksWithLatestChapters = await Bookmark.aggregate([
       // Match bookmarks for the current user
       { $match: { userId: new mongoose.Types.ObjectId(req.user._id) } },
@@ -82,6 +82,20 @@ router.get('/', async (req, res) => {
       
       // Unwind latest chapter array
       { $unwind: { path: '$latestChapter', preserveNullAndEmptyArrays: true } },
+      
+      // Lookup ALL chapters for each manga (for accurate progress calculation)
+      {
+        $lookup: {
+          from: Chapter.collection.name,
+          let: { mangaId: '$mangaId' },
+          pipeline: [
+            { $match: { $expr: { $eq: ['$mangaId', '$$mangaId'] } } },
+            { $sort: { chapterNumber: 1 } }, // Sort by chapter number ascending
+            { $project: { _id: 1, chapterNumber: 1, title: 1 } }
+          ],
+          as: 'allChapters'
+        }
+      },
       
       // Add reading progress field for sorting
       {
@@ -137,12 +151,12 @@ router.get('/', async (req, res) => {
             _id: '$latestChapter._id',
             chapterNumber: '$latestChapter.chapterNumber',
             title: '$latestChapter.title'
-          }
+          },
+          allChapters: 1 // Include all chapters for accurate progress calculation
         }
       }
     ]);
     
-    console.log('🔍 GET /bookmarks - Found bookmarks:', bookmarksWithLatestChapters);
     console.log('🔍 GET /bookmarks - Bookmark count:', bookmarksWithLatestChapters.length);
     
     // Debug: Log each bookmark's structure
@@ -154,6 +168,7 @@ router.get('/', async (req, res) => {
         userId: bookmark.userId,
         lastReadChapter: bookmark.lastReadId?.chapterNumber,
         latestChapter: bookmark.latestChapter?.chapterNumber,
+        totalChapters: bookmark.allChapters?.length || 0,
         readingProgress: bookmark.readingProgress ? `${(bookmark.readingProgress * 100).toFixed(1)}%` : 'N/A'
       });
     });
