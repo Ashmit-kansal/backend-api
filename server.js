@@ -3,6 +3,7 @@ const cors = require('cors');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const mongoose = require('mongoose');
+const logger = require('./src/config/logger');
 require('dotenv').config();
 
 const app = express();
@@ -71,7 +72,7 @@ app.use(cors({
   origin: function (origin, callback) {
     // Allow requests with no origin (like mobile apps or curl requests)
     if (!origin) {
-      console.log('🔍 CORS check - No origin (mobile app/curl), allowing');
+      logger.info('CORS check - No origin (mobile app/curl), allowing');
       return callback(null, true);
     }
     
@@ -81,14 +82,17 @@ app.use(cors({
       'http://localhost:3002'
     ];
     
-    console.log(`🔍 CORS check - Origin: ${origin}, Allowed: ${allowedOrigins.join(', ')}`);
-    console.log(`🔍 Environment FRONTEND_URL: ${process.env.FRONTEND_URL}`);
+    logger.info('CORS check', { 
+      origin, 
+      allowedOrigins: allowedOrigins.join(', '),
+      frontendUrl: process.env.FRONTEND_URL 
+    });
     
     if (allowedOrigins.indexOf(origin) !== -1) {
-      console.log(`✅ CORS allowed for origin: ${origin}`);
+      logger.info('CORS allowed', { origin });
       callback(null, true);
     } else {
-      console.warn(`🚨 Blocked request from unauthorized origin: ${origin}`);
+      logger.warn('CORS blocked', { origin, allowedOrigins });
       callback(new Error('Not allowed by CORS'));
     }
   },
@@ -102,12 +106,16 @@ app.use(cors({
 
 // Additional CORS debugging middleware
 app.use((req, res, next) => {
-  console.log(`🌐 Request: ${req.method} ${req.path} from ${req.get('Origin') || 'No Origin'}`);
-  console.log(`🔍 Headers:`, req.headers);
+  logger.debug('Request received', { 
+    method: req.method, 
+    path: req.path, 
+    origin: req.get('Origin') || 'No Origin',
+    userAgent: req.get('User-Agent')
+  });
   
   // Handle preflight OPTIONS request explicitly
   if (req.method === 'OPTIONS') {
-    console.log('🔄 Handling OPTIONS preflight request');
+    logger.info('Handling OPTIONS preflight request');
     res.header('Access-Control-Allow-Origin', req.get('Origin') || 'http://localhost:3000');
     res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
     res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
@@ -134,14 +142,26 @@ app.use((req, res, next) => {
 });
 
 // Database connection
+logger.info('Attempting to connect to MongoDB');
 mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/manga-reader', {
   useNewUrlParser: true,
   useUnifiedTopology: true,
 })
-.then(() => console.log('✅ Connected to MongoDB'))
+.then(() => {
+  logger.info('MongoDB connected successfully');
+  startServer();
+})
 .catch(err => {
-  console.error('❌ MongoDB connection error:', err);
-  console.log('⚠️  Server will run without database connection');
+  logger.error('MongoDB connection failed', { 
+    error: err.message, 
+    stack: err.stack,
+    mongoUri: process.env.MONGODB_URI ? 'Set' : 'Not set'
+  });
+  
+  if (process.env.NODE_ENV === 'production') {
+    logger.error('Exiting due to database connection failure in production');
+    process.exit(1);
+  }
 });
 
 // Routes
@@ -168,7 +188,16 @@ app.get('/health', (req, res) => {
 
 // Error handling middleware
 app.use((err, req, res, next) => {
-  console.error('Error:', err);
+  // Log error with context
+  logger.error('Unhandled error', {
+    error: err.message,
+    stack: err.stack,
+    url: req.url,
+    method: req.method,
+    ip: req.ip,
+    userAgent: req.get('User-Agent'),
+    timestamp: new Date().toISOString()
+  });
   
   // Don't expose internal errors to clients
   if (err.message === 'Not allowed by CORS') {
@@ -186,6 +215,12 @@ app.use((err, req, res, next) => {
 
 // 404 handler
 app.use('*', (req, res) => {
+  logger.warn('Route not found', { 
+    url: req.url, 
+    method: req.method, 
+    ip: req.ip 
+  });
+  
   res.status(404).json({
     success: false,
     message: 'Route not found'
@@ -194,12 +229,39 @@ app.use('*', (req, res) => {
 
 const PORT = process.env.PORT || 3004;
 
-// Listen on all network interfaces for mobile access
-app.listen(PORT, '0.0.0.0', () => {
-  console.log(`🚀 Server running on port ${PORT}`);
-  console.log(`📱 Accessible at: http://0.0.0.0:${PORT}`);
-  console.log(`🌐 Health check: http://0.0.0.0:${PORT}/health`);
-  console.log(`🔒 Security middleware enabled: Helmet, Rate Limiting, CORS`);
-});
+// Start server function
+function startServer() {
+  const server = app.listen(PORT, '0.0.0.0', () => {
+    logger.info('Server started successfully', { 
+      port: PORT, 
+      environment: process.env.NODE_ENV,
+      frontendUrl: process.env.FRONTEND_URL,
+      mongoUri: process.env.MONGODB_URI ? 'Configured' : 'Not configured'
+    });
+  });
+
+  // Graceful shutdown
+  process.on('SIGTERM', () => {
+    logger.info('SIGTERM received, shutting down gracefully');
+    server.close(() => {
+      logger.info('HTTP server closed');
+      mongoose.connection.close(false, () => {
+        logger.info('MongoDB connection closed');
+        process.exit(0);
+      });
+    });
+  });
+
+  process.on('SIGINT', () => {
+    logger.info('SIGINT received, shutting down gracefully');
+    server.close(() => {
+      logger.info('HTTP server closed');
+      mongoose.connection.close(false, () => {
+        logger.info('MongoDB connection closed');
+        process.exit(0);
+      });
+    });
+  });
+}
 
 module.exports = app; 
