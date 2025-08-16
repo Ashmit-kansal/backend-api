@@ -455,4 +455,78 @@ router.get('/genre/:genre', async (req, res) => {
     });
   }
 });
-module.exports = router;
+
+// Generate expirable URL for Cloudinary images
+router.post('/expirable-url', async (req, res) => {
+  try {
+    const { publicId, type, expiresIn } = req.body;
+    
+    if (!publicId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Public ID is required'
+      });
+    }
+
+    if (!type || !['cover', 'chapter', 'avatar'].includes(type)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Valid type is required (cover, chapter, or avatar)'
+      });
+    }
+
+    // Import the service dynamically to avoid circular dependencies
+    const ExpirableUrlService = require('../services/expirableUrlService');
+    
+    let expirableUrl;
+    let defaultExpiresIn;
+    
+    // Ensure expiresIn is a valid number
+    const validExpiresIn = typeof expiresIn === 'number' && !isNaN(expiresIn) && expiresIn > 0 
+      ? expiresIn 
+      : null; // Will use service defaults
+    
+    switch (type) {
+      case 'cover':
+        expirableUrl = ExpirableUrlService.generateCoverUrl(publicId, validExpiresIn);
+        defaultExpiresIn = 7200; // 2 hours
+        break;
+      case 'chapter':
+        expirableUrl = ExpirableUrlService.generateChapterPageUrl(publicId, validExpiresIn);
+        defaultExpiresIn = 1800; // 30 minutes
+        break;
+      case 'avatar':
+        expirableUrl = ExpirableUrlService.generateAvatarUrl(publicId, validExpiresIn);
+        defaultExpiresIn = 86400; // 24 hours
+        break;
+      default:
+        expirableUrl = ExpirableUrlService.generateSignedUrl(publicId, validExpiresIn || 3600);
+        defaultExpiresIn = validExpiresIn || 3600;
+    }
+
+    // Extract the actual expiration time from the generated URL instead of recalculating
+    const urlObj = new URL(expirableUrl);
+    const actualExpiresAt = urlObj.searchParams.get('e');
+    const actualExpiresIn = actualExpiresAt ? parseInt(actualExpiresAt) - Math.round(Date.now() / 1000) : (expiresIn || defaultExpiresIn);
+
+    res.json({
+      success: true,
+      data: {
+        expirableUrl,
+        publicId,
+        type,
+        expiresIn: actualExpiresIn,
+        expiresAt: actualExpiresAt ? parseInt(actualExpiresAt) : null
+      }
+    });
+  } catch (error) {
+    console.error('Error generating expirable URL:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to generate expirable URL',
+      error: error.message
+    });
+  }
+});
+
+module.exports = router;

@@ -26,6 +26,10 @@ const chapterSchema = new mongoose.Schema({
     imageUrl: {
       type: String,
       required: true
+    },
+    cloudinaryPublicId: {
+      type: String,
+      default: null
     }
   }],
   publishedAt: {

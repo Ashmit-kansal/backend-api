@@ -27,47 +27,7 @@ app.use(helmet({
   crossOriginResourcePolicy: { policy: "cross-origin" }
 }));
 
-// Rate limiting - different limits for authenticated vs unauthenticated users
-const limiter = rateLimit({
-  windowMs: 1 * 60 * 1000, // 1 minute
-  max: (req) => {
-    // If user is authenticated, allow 400 requests per minute
-    // If not authenticated, allow 300 requests per minute
-    return req.user ? 400 : 300;
-  },
-  keyGenerator: (req) => {
-    // Use user ID if authenticated, fallback to IP for unauthenticated
-    return req.user ? req.user._id : req.ip;
-  },
-  message: {
-    success: false,
-    message: (req) => {
-      const limit = req.user ? 400 : 300;
-      return `Rate limit exceeded. ${req.user ? 'Authenticated users' : 'Unauthenticated users'} are limited to ${limit} requests per minute.`;
-    }
-  },
-  standardHeaders: true,
-  legacyHeaders: false,
-});
-
-// Apply rate limiting to all routes
-app.use('/api/', limiter);
-
-// Stricter rate limiting for auth routes
-const authLimiter = rateLimit({
-  windowMs: 1 * 60 * 1000, // 1 minute
-  max: 50, // limit each IP to 50 requests per minute
-  message: {
-    success: false,
-    message: 'Too many authentication attempts, please try again later.'
-  },
-  standardHeaders: true,
-  legacyHeaders: false,
-});
-
-app.use('/api/auth/', authLimiter);
-
-// CORS configuration - more restrictive
+// CORS configuration - must come BEFORE rate limiting
 app.use(cors({
   origin: function (origin, callback) {
     // Allow requests with no origin (like mobile apps or curl requests)
@@ -80,9 +40,15 @@ app.use(cors({
     
     const allowedOrigins = [
       frontendUrl,
+      'http://localhost:3000',
       'http://localhost:3001',
       'http://localhost:3002'
     ];
+    
+    // Debug logging for CORS
+    if (process.env.NODE_ENV === 'development') {
+      console.log('🔍 CORS Check:', { origin, allowedOrigins, frontendUrl });
+    }
     
     if (allowedOrigins.indexOf(origin) !== -1) {
       callback(null, true);
@@ -99,6 +65,73 @@ app.use(cors({
   optionsSuccessStatus: 204
 }));
 
+// Rate limiting configuration
+const limiter = rateLimit({
+  windowMs: 1 * 60 * 1000, // 1 minute
+  max: (req) => {
+    return req.user ? 400 : 300;
+  },
+  keyGenerator: (req) => {
+    return req.user ? req.user._id : req.ip;
+  },
+  message: {
+    success: false,
+    message: 'Rate limit exceeded. Please try again later.'
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+  // Add CORS headers to rate limit responses
+  handler: (req, res) => {
+    const origin = req.get('Origin');
+    if (origin && (origin === 'http://localhost:3000' || origin.startsWith('http://localhost:'))) {
+      res.header('Access-Control-Allow-Origin', origin);
+    }
+    res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+    res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    res.header('Access-Control-Allow-Credentials', 'true');
+    
+    const limit = req.user ? 400 : 300;
+    const message = `Rate limit exceeded. ${req.user ? 'Authenticated users' : 'Unauthenticated users'} are limited to ${limit} requests per minute.`;
+    
+    res.status(429).json({
+      success: false,
+      message: message
+    });
+  }
+});
+
+// Apply rate limiting to all routes AFTER CORS and test endpoints
+app.use('/api/', limiter);
+
+// Stricter rate limiting for auth routes
+const authLimiter = rateLimit({
+  windowMs: 1 * 60 * 1000, // 1 minute
+  max: 50, // limit each IP to 50 requests per minute
+  message: {
+    success: false,
+    message: 'Too many authentication attempts, please try again later.'
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+  // Add CORS headers to auth rate limit responses
+  handler: (req, res) => {
+    const origin = req.get('Origin');
+    if (origin && (origin === 'http://localhost:3000' || origin.startsWith('http://localhost:'))) {
+      res.header('Access-Control-Allow-Origin', origin);
+    }
+    res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+    res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    res.header('Access-Control-Allow-Credentials', 'true');
+    
+    res.status(429).json({
+      success: false,
+      message: 'Too many authentication attempts, please try again later.'
+    });
+  }
+});
+
+app.use('/api/auth/', authLimiter);
+
 // Additional CORS debugging middleware
 app.use((req, res, next) => {
   // Only log in development and only for errors
@@ -109,25 +142,6 @@ app.use((req, res, next) => {
       next();
       return;
     }
-  }
-  
-  // Handle preflight OPTIONS request explicitly
-  if (req.method === 'OPTIONS') {
-    const origin = req.get('Origin');
-    const frontendUrl = process.env.FRONTEND_URL ? process.env.FRONTEND_URL.replace(/\/$/, '') : 'http://localhost:3000';
-    
-    // Allow the origin if it matches our frontend URL
-    if (origin && (origin === frontendUrl || origin.startsWith('http://localhost:'))) {
-      res.header('Access-Control-Allow-Origin', origin);
-    } else {
-      res.header('Access-Control-Allow-Origin', frontendUrl);
-    }
-    
-    res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-    res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-    res.header('Access-Control-Allow-Credentials', 'true');
-    res.status(204).end();
-    return;
   }
   
   next();
@@ -145,6 +159,16 @@ app.use((req, res, next) => {
   res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
   res.setHeader('Permissions-Policy', 'geolocation=(), microphone=(), camera=()');
   next();
+});
+
+// Test endpoint for CORS verification - bypass rate limiting
+app.get('/api/test-cors', (req, res) => {
+  res.json({ 
+    success: true, 
+    message: 'CORS test successful',
+    timestamp: new Date().toISOString(),
+    origin: req.get('Origin')
+  });
 });
 
 // Database connection

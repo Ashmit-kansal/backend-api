@@ -20,6 +20,11 @@ const mangaSchema = new mongoose.Schema({
     type: String,
     required: true
   },
+  coverImagePublicId: {
+    type: String,
+    default: null,
+    index: true
+  },
   genres: [{
     type: String,
     trim: true
