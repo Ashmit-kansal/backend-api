@@ -42,7 +42,7 @@ router.get('/', auth, async (req, res) => {
 router.get('/manga/:mangaId', async (req, res) => {
   try {
     const { mangaId } = req.params;
-    const { page = 1, limit = 20, chapterId } = req.query;
+    const { page = 1, limit = 20, chapterId, sort = 'newest' } = req.query;
     const authHeader = req.headers.authorization;
     let currentUserId = null;
     
@@ -71,9 +71,27 @@ router.get('/manga/:mangaId', async (req, res) => {
       query.chapterId = chapterId;
     }
     
+    // Build sort object based on frontend parameter
+    let sortObject = {};
+    switch (sort) {
+      case 'newest':
+        sortObject = { createdAt: -1 };
+        break;
+      case 'oldest':
+        sortObject = { createdAt: 1 };
+        break;
+      case 'likes':
+        sortObject = { 'reactionCounts.likes': -1, createdAt: -1 };
+        break;
+      default:
+        sortObject = { createdAt: -1 };
+    }
+    
+    console.log('Sorting comments by:', sort, 'Sort object:', sortObject);
+    
     const comments = await Comment.find(query)
       .populate('userId', 'username avatar')
-      .sort({ createdAt: -1 })
+      .sort(sortObject)
       .skip(skip)
       .limit(parseInt(limit));
     
