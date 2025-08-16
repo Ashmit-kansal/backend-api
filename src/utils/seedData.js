@@ -2,7 +2,6 @@ const Manga = require('../models/Manga');
 const Chapter = require('../models/Chapter');
 const User = require('../models/User');
 const Bookmark = require('../models/Bookmark');
-
 const sampleManga = [
   {
     title: "One Piece",
@@ -59,7 +58,6 @@ const sampleManga = [
     }
   }
 ];
-
 const sampleChapters = [
   {
     chapterNumber: 1,
@@ -112,7 +110,6 @@ const sampleChapters = [
     views: 350
   }
 ];
-
 const sampleUsers = [
   {
     username: 'testuser',
@@ -122,37 +119,27 @@ const sampleUsers = [
     isActive: true
   }
 ];
-
 async function seedData() {
   try {
-    console.log('🌱 Starting data seeding...');
-    
     // Clear existing data
     await Manga.deleteMany({});
     await Chapter.deleteMany({});
     await User.deleteMany({});
     await Bookmark.deleteMany({});
-    
-    console.log('🗑️ Cleared existing data');
-    
     // Create users
     const createdUsers = [];
     for (const userData of sampleUsers) {
       const user = new User(userData);
       const savedUser = await user.save();
       createdUsers.push(savedUser);
-      console.log(`👤 Created user: ${savedUser.username}`);
     }
-    
     // Create manga
     const createdManga = [];
     for (const mangaData of sampleManga) {
       const manga = new Manga(mangaData);
       const savedManga = await manga.save();
       createdManga.push(savedManga);
-      console.log(`📚 Created manga: ${savedManga.title}`);
     }
-    
     // Create chapters for each manga
     for (const manga of createdManga) {
       for (const chapterData of sampleChapters) {
@@ -161,16 +148,13 @@ async function seedData() {
           mangaId: manga._id
         });
         await chapter.save();
-        console.log(`📖 Created chapter ${chapterData.chapterNumber} for ${manga.title}`);
       }
     }
-    
     // Create sample bookmarks for the test user
     if (createdUsers.length > 0 && createdManga.length > 0) {
       const testUser = createdUsers[0];
       const firstManga = createdManga[0];
       const firstChapter = await Chapter.findOne({ mangaId: firstManga._id }).sort({ chapterNumber: 1 });
-      
       if (firstChapter) {
         const bookmark = new Bookmark({
           userId: testUser._id,
@@ -178,22 +162,15 @@ async function seedData() {
           lastReadId: firstChapter._id
         });
         await bookmark.save();
-        
         // Update bookmarkCount in manga stats
         await Manga.findByIdAndUpdate(firstManga._id, {
           $inc: { 'stats.bookmarkCount': 1 }
         });
-        
-        console.log(`🔖 Created bookmark for ${firstManga.title} for user ${testUser.username}`);
       }
     }
-    
-    console.log('✅ Data seeding completed successfully!');
     console.log(`📊 Created ${createdUsers.length} users, ${createdManga.length} manga with ${createdManga.length * sampleChapters.length} chapters total`);
-    
   } catch (error) {
     console.error('❌ Error seeding data:', error);
   }
 }
-
 module.exports = { seedData };

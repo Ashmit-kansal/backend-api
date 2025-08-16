@@ -2,36 +2,25 @@ const express = require('express');
 const router = express.Router();
 const Manga = require('../models/Manga');
 const Chapter = require('../models/Chapter');
-
 // Get top-rated manga
 router.get('/top-rated', async (req, res) => {
   try {
     const { limit = 10 } = req.query;
-    
-    console.log('🔍 Fetching top-rated manga with limit:', limit);
-    
     // First, let's see what's in the database
     const totalManga = await Manga.countDocuments();
     const mangaWithRatings = await Manga.countDocuments({ 'stats.totalRatings': { $gt: 0 } });
     const mangaWithoutRatings = await Manga.countDocuments({ 'stats.totalRatings': 0 });
-    
-    console.log('🔍 Database stats:', { totalManga, mangaWithRatings, mangaWithoutRatings });
-    
     let manga = await Manga.find({ 'stats.totalRatings': { $gt: 0 } })
       .select('_id slug title coverImage genres status authors description stats lastUpdated')
       .sort({ 'stats.averageRating': -1, 'stats.totalRatings': -1 })
       .limit(parseInt(limit));
-    
     // If no manga with ratings, fall back to all manga
     if (manga.length === 0) {
-      console.log('🔍 No manga with ratings found, falling back to all manga');
       manga = await Manga.find()
         .select('_id slug title coverImage genres status authors description stats lastUpdated')
         .sort({ lastUpdated: -1 })
         .limit(parseInt(limit));
     }
-    
-    console.log('🔍 Found manga with ratings:', manga.length);
     if (manga.length > 0) {
       console.log('🔍 First manga sample:', {
         title: manga[0].title,
@@ -39,7 +28,6 @@ router.get('/top-rated', async (req, res) => {
         totalRatings: manga[0].stats?.totalRatings
       });
     }
-    
     res.json({
       success: true,
       data: manga
@@ -52,30 +40,25 @@ router.get('/top-rated', async (req, res) => {
     });
   }
 });
-
 // Get recent manga
 router.get('/recent', async (req, res) => {
   try {
     const { limit = 20 } = req.query;
-    
     const manga = await Manga.find()
       .select('_id slug title coverImage genres status authors description stats lastUpdated')
       .sort({ lastUpdated: -1 })
       .limit(parseInt(limit));
-    
     res.json({
       success: true,
       data: manga
     });
   } catch (error) {
-    console.error('Error fetching recent manga:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to fetch recent manga'
     });
   }
 });
-
 // Test endpoint for pagination debugging
 router.get('/test-pagination', async (req, res) => {
   try {
@@ -83,20 +66,13 @@ router.get('/test-pagination', async (req, res) => {
     const parsedLimit = parseInt(limit);
     const parsedPage = parseInt(page);
     const skip = (parsedPage - 1) * parsedLimit;
-    
-    console.log('🧪 Test pagination:', { limit: parsedLimit, page: parsedPage, skip });
-    
     // Simple find with skip and limit
     const manga = await Manga.find()
       .sort({ lastUpdated: -1 })
       .skip(skip)
       .limit(parsedLimit)
       .select('title lastUpdated');
-    
     const total = await Manga.countDocuments();
-    
-    console.log(`🧪 Test result: expected ${parsedLimit}, got ${manga.length}`);
-    
     res.json({
       success: true,
       data: manga,
@@ -115,7 +91,6 @@ router.get('/test-pagination', async (req, res) => {
     });
   }
 });
-
 // Get recent manga with last 3 chapters using aggregation
 router.get('/recent-with-chapters', async (req, res) => {
   try {
@@ -123,24 +98,14 @@ router.get('/recent-with-chapters', async (req, res) => {
     const parsedLimit = parseInt(limit);
     const parsedPage = parseInt(page);
     const skip = (parsedPage - 1) * parsedLimit;
-    
-    console.log('🔍 Raw query parameters:', req.query);
     console.log('🔍 Parsed parameters:', { limit: parsedLimit, page: parsedPage, skip });
-    console.log('🔍 Fetching recent manga with chapters using aggregation:', { limit: parsedLimit, page: parsedPage, skip });
-    
     // Use aggregation pipeline to get manga with their last 3 chapters
-    console.log('🔍 Starting aggregation pipeline...');
-    
     // First, let's test with a simple approach to see if pagination works
-    console.log('🧪 Testing simple pagination first...');
     const simpleManga = await Manga.find()
       .sort({ lastUpdated: -1 })
       .skip(skip)
       .limit(parsedLimit)
       .select('title lastUpdated');
-    
-    console.log(`🧪 Simple pagination result: expected ${parsedLimit}, got ${simpleManga.length}`);
-    
     // Now try the full aggregation pipeline
     const mangaWithChapters = await Manga.aggregate([
       // Stage 1: Sort manga by lastUpdated (most recent first)
@@ -204,17 +169,10 @@ router.get('/recent-with-chapters', async (req, res) => {
         }
       }
     ]);
-    
-    console.log('🔍 Aggregation pipeline completed');
     console.log(`🔍 Aggregation result: expected ${parsedLimit}, got ${mangaWithChapters.length}`);
-    
     // Get total count for pagination
     const total = await Manga.countDocuments();
-    
-    console.log(`✅ Successfully fetched ${mangaWithChapters.length} manga with chapters`);
     console.log(`📊 Pagination details: total=${total}, limit=${parsedLimit}, page=${parsedPage}, skip=${skip}`);
-    console.log(`📊 Expected items: ${parsedLimit}, Actual items returned: ${mangaWithChapters.length}`);
-    
     res.json({
       success: true,
       data: mangaWithChapters,
@@ -233,29 +191,23 @@ router.get('/recent-with-chapters', async (req, res) => {
     });
   }
 });
-
 // Get latest chapters
 router.get('/latest-chapters', async (req, res) => {
   try {
     const { limit = 10 } = req.query;
-    
     const chapters = await Chapter.find()
       .sort({ publishedAt: -1 })
       .limit(parseInt(limit))
       .populate('mangaId', 'title coverImage');
-    
     res.json({
       success: true,
       data: chapters
     });
   } catch (error) {
-    console.error('Error fetching latest chapters:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to fetch latest chapters'
     });
   }
 });
-
-module.exports = router;
-
+module.exports = router;

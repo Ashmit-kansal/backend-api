@@ -72,7 +72,6 @@ app.use(cors({
   origin: function (origin, callback) {
     // Allow requests with no origin (like mobile apps or curl requests)
     if (!origin) {
-      logger.info('CORS check - No origin (mobile app/curl), allowing');
       return callback(null, true);
     }
     
@@ -85,15 +84,7 @@ app.use(cors({
       'http://localhost:3002'
     ];
     
-    logger.info('CORS check', { 
-      origin, 
-      allowedOrigins: allowedOrigins.join(', '),
-      frontendUrl: process.env.FRONTEND_URL,
-      cleanedFrontendUrl: frontendUrl
-    });
-    
     if (allowedOrigins.indexOf(origin) !== -1) {
-      logger.info('CORS allowed', { origin });
       callback(null, true);
     } else {
       logger.warn('CORS blocked', { origin, allowedOrigins });
@@ -110,26 +101,26 @@ app.use(cors({
 
 // Additional CORS debugging middleware
 app.use((req, res, next) => {
-  logger.debug('Request received', { 
-    method: req.method, 
-    path: req.path, 
-    origin: req.get('Origin') || 'No Origin',
-    userAgent: req.get('User-Agent')
-  });
+  // Only log in development and only for errors
+  if (process.env.NODE_ENV === 'development' && req.method !== 'OPTIONS') {
+    // Minimal logging - only log actual errors or unusual requests
+    if (req.path.includes('/api/') && !req.path.includes('/health')) {
+      // Skip logging for health checks and common API calls
+      next();
+      return;
+    }
+  }
   
   // Handle preflight OPTIONS request explicitly
   if (req.method === 'OPTIONS') {
-    logger.info('Handling OPTIONS preflight request');
     const origin = req.get('Origin');
     const frontendUrl = process.env.FRONTEND_URL ? process.env.FRONTEND_URL.replace(/\/$/, '') : 'http://localhost:3000';
     
     // Allow the origin if it matches our frontend URL
     if (origin && (origin === frontendUrl || origin.startsWith('http://localhost:'))) {
       res.header('Access-Control-Allow-Origin', origin);
-      logger.info('OPTIONS preflight - Origin allowed', { origin, frontendUrl });
     } else {
       res.header('Access-Control-Allow-Origin', frontendUrl);
-      logger.info('OPTIONS preflight - Using default origin', { origin, frontendUrl });
     }
     
     res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
@@ -158,12 +149,6 @@ app.use((req, res, next) => {
 
 // Database connection
 logger.info('Attempting to connect to MongoDB');
-logger.info('Environment check', {
-  nodeEnv: process.env.NODE_ENV,
-  port: process.env.PORT,
-  mongoUri: process.env.MONGODB_URI ? 'Set' : 'Not set',
-  frontendUrl: process.env.FRONTEND_URL || 'Not set'
-});
 
 mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/manga-reader', {
   useNewUrlParser: true,
@@ -211,7 +196,10 @@ app.get('/health', (req, res) => {
     mongoState: mongoose.connection.readyState
   };
   
-  logger.info('Health check requested', healthCheck);
+  // Only log health check errors, not successful checks
+  if (mongoose.connection.readyState !== 1) {
+    logger.warn('Health check failed - MongoDB not connected', { state: mongoose.connection.readyState });
+  }
   
   // Return 200 for Railway health check
   res.status(200).json(healthCheck);
@@ -255,11 +243,14 @@ app.use((err, req, res, next) => {
 
 // 404 handler
 app.use('*', (req, res) => {
-  logger.warn('Route not found', { 
-    url: req.url, 
-    method: req.method, 
-    ip: req.ip 
-  });
+  // Only log 404s for non-API routes to reduce noise
+  if (!req.url.startsWith('/api/') && !req.url.startsWith('/health')) {
+    logger.warn('Route not found', { 
+      url: req.url, 
+      method: req.method, 
+      ip: req.ip 
+    });
+  }
   
   res.status(404).json({
     success: false,
@@ -270,20 +261,13 @@ app.use('*', (req, res) => {
 const PORT = process.env.PORT || 3004;
 
 // Log the port being used
-logger.info('Server configuration', { 
-  port: PORT, 
-  nodeEnv: process.env.NODE_ENV,
-  mongoUri: process.env.MONGODB_URI ? 'Set' : 'Not set'
-});
 
 // Start server function
 function startServer() {
   const server = app.listen(PORT, '0.0.0.0', () => {
     logger.info('Server started successfully', { 
       port: PORT, 
-      environment: process.env.NODE_ENV,
-      frontendUrl: process.env.FRONTEND_URL,
-      mongoUri: process.env.MONGODB_URI ? 'Configured' : 'Not configured'
+      environment: process.env.NODE_ENV
     });
   });
 

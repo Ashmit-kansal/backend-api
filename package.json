@@ -11,6 +11,8 @@
     "logs": "tail -f logs/combined.log",
     "logs:error": "tail -f logs/error.log",
     "logs:clear": "rm -rf logs/*.log",
+    "cleanup-logs": "node cleanup-logs.js",
+    "test-logging": "node test-logging.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "dependencies": {

@@ -1,13 +1,11 @@
 const cloudinary = require('cloudinary').v2;
 const { Readable } = require('stream');
-
 // Configure Cloudinary
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
   api_key: process.env.CLOUDINARY_API_KEY,
   api_secret: process.env.CLOUDINARY_API_SECRET
 });
-
 class ImageUploadService {
   static async uploadAvatar(buffer, filename) {
     try {
@@ -29,7 +27,6 @@ class ImageUploadService {
             }
           }
         );
-
         // Convert buffer to stream
         const readableStream = new Readable();
         readableStream.push(buffer);
@@ -41,52 +38,42 @@ class ImageUploadService {
       throw error;
     }
   }
-
   static async deleteAvatar(publicId) {
     try {
       if (!publicId) return;
-      
       const result = await cloudinary.uploader.destroy(publicId);
-      console.log('Avatar deleted from Cloudinary:', result);
       return result;
     } catch (error) {
       console.error('Error deleting avatar from Cloudinary:', error);
       // Don't throw error for deletion failures
     }
   }
-
   static async updateUserAvatar(user, buffer) {
     try {
       // Delete old avatar if exists
       if (user.avatarPublicId) {
         await this.deleteAvatar(user.avatarPublicId);
       }
-
       // Upload new avatar
       const result = await this.uploadAvatar(buffer);
-      
       // Update user document
       user.avatar = result.secure_url;
       user.avatarPublicId = result.public_id;
       user.avatarUpdatedAt = new Date();
       await user.save();
-
       return {
         avatar: result.secure_url,
         avatarPublicId: result.public_id,
         avatarUpdatedAt: user.avatarUpdatedAt
       };
     } catch (error) {
-      console.error('Error updating user avatar:', error);
       throw error;
     }
   }
-
   static async getAvatarUpdateInfo(user) {
     try {
       const canUpdate = user.canUpdateAvatar();
       const cooldown = user.getAvatarUpdateCooldown();
-      
       return {
         currentAvatar: user.avatar,
         canUpdate,
@@ -98,18 +85,14 @@ class ImageUploadService {
       throw error;
     }
   }
-
   static async deleteUserAvatar(publicId) {
     try {
       if (!publicId) return;
-      
       await this.deleteAvatar(publicId);
-      console.log('User avatar deleted successfully');
     } catch (error) {
       console.error('Error deleting user avatar:', error);
       // Don't throw error for cleanup failures
     }
   }
 }
-
 module.exports = ImageUploadService;
