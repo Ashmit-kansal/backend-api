@@ -208,6 +208,7 @@ app.use('/api/bookmarks', require('./src/routes/bookmarks'));
 app.use('/api/manga-requests', require('./src/routes/mangaRequests'));
 app.use('/api/error-reports', require('./src/routes/errorReports'));
 
+
 // Health check endpoint
 app.get('/health', (req, res) => {
   const healthCheck = {
