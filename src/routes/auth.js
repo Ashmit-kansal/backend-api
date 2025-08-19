@@ -8,7 +8,7 @@ const User = require('../models/User');
 const Bookmark = require('../models/Bookmark');
 const Rating = require('../models/Rating');
 const Comment = require('../models/Comment');
-const ImageUploadService = require('../services/imageUploadService');
+const R2ImageUploadService = require('../services/r2ImageUploadService');
 const Manga = require('../models/Manga'); // Added Manga model import
 const OTP = require('../models/OTP');
 const { sendOTPEmail, sendWelcomeEmail } = require('../services/emailService');
@@ -379,12 +379,12 @@ router.delete('/delete-account', auth, async (req, res) => {
     user.isActive = false;
     user.lastActive = new Date();
     await user.save();
-    // Delete user's avatar from Cloudinary if it exists
+            // Delete user's avatar from R2 if it exists
     if (user.avatarPublicId) {
       try {
-        await ImageUploadService.deleteUserAvatar(user.avatarPublicId);
+        await R2ImageUploadService.deleteUserAvatar(user.avatarPublicId);
       } catch (avatarError) {
-        console.warn('Could not delete avatar from Cloudinary:', avatarError);
+        console.warn('Could not delete avatar from R2:', avatarError);
       }
     }
     res.json({
@@ -422,8 +422,8 @@ router.post('/upload-avatar', auth, upload.single('avatar'), async (req, res) =>
         message: 'Avatar can only be updated once per week'
       });
     }
-    // Upload to Cloudinary and update user
-    const result = await ImageUploadService.updateUserAvatar(user, req.file.buffer);
+    // Upload to R2 and update user
+    const result = await R2ImageUploadService.updateUserAvatar(user, req.file.buffer);
     res.json({
       success: true,
       data: {
@@ -450,7 +450,7 @@ router.get('/avatar-info', auth, async (req, res) => {
         message: 'User not found'
       });
     }
-    const avatarInfo = await ImageUploadService.getAvatarUpdateInfo(user);
+    const avatarInfo = await R2ImageUploadService.getAvatarUpdateInfo(user);
     res.json({
       success: true,
       data: avatarInfo
