@@ -36,7 +36,7 @@ router.get('/', auth, async (req, res) => {
 router.get('/manga/:mangaId', async (req, res) => {
   try {
     const { mangaId } = req.params;
-    const { page = 1, limit = 20, chapterId, sort = 'newest' } = req.query;
+    const { page = 1, limit = 20, chapterId, type, sort = 'newest' } = req.query;
     const authHeader = req.headers.authorization;
     let currentUserId = null;
     // Extract user ID from token if provided
@@ -50,11 +50,24 @@ router.get('/manga/:mangaId', async (req, res) => {
       }
     }
     const skip = (parseInt(page) - 1) * parseInt(limit);
-    // Build query based on whether chapterId is provided
+    // Build query based on type and chapterId
     const query = { mangaId };
-    if (chapterId) {
+    
+    // Filter by type: 'manga' = general manga comments, 'chapter' = chapter-specific comments
+    if (type === 'manga') {
+      // For manga comments, chapterId should be null or not provided
+      query.chapterId = null;
+    } else if (type === 'chapter') {
+      // For chapter comments, chapterId should be provided
+      if (chapterId) {
+        query.chapterId = chapterId;
+      }
+    } else if (chapterId) {
+      // Fallback: if chapterId is provided, filter by it
       query.chapterId = chapterId;
     }
+    // If no type specified and no chapterId, show all comments for the manga (no filtering)
+    
     // Build sort object based on frontend parameter
     let sortObject = {};
     switch (sort) {
@@ -75,6 +88,7 @@ router.get('/manga/:mangaId', async (req, res) => {
       .sort(sortObject)
       .skip(skip)
       .limit(parseInt(limit));
+      
     // Add user reaction information if user is authenticated
     let commentsWithReactions;
     if (currentUserId) {
