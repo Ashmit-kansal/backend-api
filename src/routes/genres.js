@@ -60,38 +60,6 @@ router.get('/', async (req, res) => {
     });
   }
 });
-// Get manga by genre
-router.get('/:genre/manga', async (req, res) => {
-  try {
-    const { page = 1, limit = 20 } = req.query;
-    const skip = (page - 1) * limit;
-    const manga = await Manga.find({
-      genres: { $in: [req.params.genre] }
-    })
-    .select('_id slug title coverImage genres status authors description stats lastUpdated')
-    .sort({ lastUpdated: -1 })
-    .skip(skip)
-    .limit(parseInt(limit));
-    const total = await Manga.countDocuments({
-      genres: { $in: [req.params.genre] }
-    });
-    res.json({
-      success: true,
-      data: manga,
-      pagination: {
-        currentPage: parseInt(page),
-        totalPages: Math.ceil(total / limit),
-        totalItems: total,
-        itemsPerPage: parseInt(limit)
-      }
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: 'Failed to fetch manga by genre'
-    });
-  }
-});
 // Get specific genre by slug
 router.get('/:slug', async (req, res) => {
   try {
@@ -126,4 +94,70 @@ router.get('/:slug', async (req, res) => {
     });
   }
 });
-module.exports = router;
+
+// Get manga by genre - MUST come after /:slug to avoid route conflicts
+router.get('/:genre/manga', async (req, res) => {
+  try {
+    const { page = 1, limit = 20 } = req.query;
+    const skip = (page - 1) * limit;
+    const genreName = req.params.genre;
+    
+    // Try exact match first
+    let manga = await Manga.find({
+      genres: { $in: [genreName] }
+    })
+    .select('_id slug title coverImage genres status authors description stats lastUpdated')
+    .sort({ lastUpdated: -1 })
+    .skip(skip)
+    .limit(parseInt(limit));
+    
+    let total = await Manga.countDocuments({
+      genres: { $in: [genreName] }
+    });
+    
+    // If no results, try case-insensitive match
+    if (total === 0) {
+      // Get all manga to find the exact case of the genre name
+      const allManga = await Manga.find({}, 'genres');
+      const sampleManga = allManga.slice(0, 5);
+      
+      // Find the exact genre name from manga documents (case-insensitive)
+      const exactGenreName = sampleManga.find(manga => 
+        manga.genres && manga.genres.some(g => g.toLowerCase() === genreName.toLowerCase())
+      )?.genres?.find(g => g.toLowerCase() === genreName.toLowerCase());
+      
+      if (exactGenreName) {
+        // Use the exact genre name from the manga documents (with correct case)
+        manga = await Manga.find({
+          genres: { $in: [exactGenreName] }
+        })
+        .select('_id slug title coverImage genres status authors description stats lastUpdated')
+        .sort({ lastUpdated: -1 })
+        .skip(skip)
+        .limit(parseInt(limit));
+        
+        total = await Manga.countDocuments({
+          genres: { $in: [exactGenreName] }
+        });
+      }
+    }
+    
+    res.json({
+      success: true,
+      data: manga,
+      pagination: {
+        currentPage: parseInt(page),
+        totalPages: Math.ceil(total / limit),
+        totalItems: total,
+        itemsPerPage: parseInt(limit)
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching manga by genre:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch manga by genre'
+    });
+  }
+});
+module.exports = router;
