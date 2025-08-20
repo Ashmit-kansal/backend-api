@@ -38,12 +38,11 @@ app.use(cors({
     // Clean up FRONTEND_URL by removing trailing slash
     const frontendUrl = process.env.FRONTEND_URL ? process.env.FRONTEND_URL.replace(/\/$/, '') : 'http://localhost:3000';
     
-    const allowedOrigins = [
-      frontendUrl,
-      'http://localhost:3000',
-      'http://localhost:3001',
-      'http://localhost:3002'
-    ];
+    // In production, only allow the FRONTEND_URL from environment variable
+    // In development, allow localhost for testing
+    const allowedOrigins = process.env.NODE_ENV === 'production' 
+      ? [frontendUrl] // Production: Only FRONTEND_URL
+      : [frontendUrl, 'http://localhost:3000', 'http://localhost:3001', 'http://localhost:3002']; // Development: FRONTEND_URL + localhost
     
     // Debug logging for CORS
     if (process.env.NODE_ENV === 'development') {
@@ -83,11 +82,18 @@ const limiter = rateLimit({
   // Add CORS headers to rate limit responses
   handler: (req, res) => {
     const origin = req.get('Origin');
-    if (origin && (origin === 'http://localhost:3000' || origin.startsWith('http://localhost:'))) {
+    const frontendUrl = process.env.FRONTEND_URL ? process.env.FRONTEND_URL.replace(/\/$/, '') : 'http://localhost:3000';
+    // In production, only allow the FRONTEND_URL from environment variable
+    // In development, allow localhost for testing
+    const allowedOrigins = process.env.NODE_ENV === 'production' 
+      ? [frontendUrl] // Production: Only FRONTEND_URL
+      : [frontendUrl, 'http://localhost:3000', 'http://localhost:3001', 'http://localhost:3002']; // Development: FRONTEND_URL + localhost
+    
+    if (origin && allowedOrigins.includes(origin)) {
       res.header('Access-Control-Allow-Origin', origin);
     }
-    res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-    res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    res.header('Access-Control-Allow-Methods', 'GET', 'POST', 'PUT', 'DELETE', 'OPTIONS');
+    res.header('Access-Control-Allow-Headers', 'Content-Type', 'Authorization');
     res.header('Access-Control-Allow-Credentials', 'true');
     
     const limit = req.user ? 400 : 300;
@@ -116,11 +122,18 @@ const authLimiter = rateLimit({
   // Add CORS headers to auth rate limit responses
   handler: (req, res) => {
     const origin = req.get('Origin');
-    if (origin && (origin === 'http://localhost:3000' || origin.startsWith('http://localhost:'))) {
+    const frontendUrl = process.env.FRONTEND_URL ? process.env.FRONTEND_URL.replace(/\/$/, '') : 'http://localhost:3000';
+    // In production, only allow the FRONTEND_URL from environment variable
+    // In development, allow localhost for testing
+    const allowedOrigins = process.env.NODE_ENV === 'production' 
+      ? [frontendUrl] // Production: Only FRONTEND_URL
+      : [frontendUrl, 'http://localhost:3000', 'http://localhost:3001', 'http://localhost:3002']; // Development: FRONTEND_URL + localhost
+    
+    if (origin && allowedOrigins.includes(origin)) {
       res.header('Access-Control-Allow-Origin', origin);
     }
-    res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-    res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    res.header('Access-Control-Allow-Methods', 'GET', 'POST', 'PUT', 'DELETE', 'OPTIONS');
+    res.header('Access-Control-Allow-Headers', 'Content-Type', 'Authorization');
     res.header('Access-Control-Allow-Credentials', 'true');
     
     res.status(429).json({
