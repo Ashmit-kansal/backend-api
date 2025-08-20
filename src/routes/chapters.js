@@ -155,9 +155,10 @@ router.get('/manga/:slug/chapter/:chapterNumber', async (req, res) => {
       });
     }
     // Then find the chapter by manga ID and chapter number
+    // Use parseFloat to handle decimal chapter numbers like 0.1
     const chapter = await Chapter.findOne({ 
       mangaId: manga._id, 
-      chapterNumber: parseInt(chapterNumber) 
+      chapterNumber: parseFloat(chapterNumber) 
     }).populate('mangaId', 'title slug');
     if (!chapter) {
       return res.status(404).json({
