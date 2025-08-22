@@ -70,6 +70,10 @@ const mangaSchema = new mongoose.Schema({
   lastUpdated: {
     type: Date,
     default: Date.now
+  },
+  indexable: {
+    type: Boolean,
+    default: true // Control whether manga should be indexed by search engines
   }
 }, {
   timestamps: true

@@ -119,6 +119,30 @@ router.post('/debug/recreate-index', async (req, res) => {
     });
   }
 });
+// Get indexable manga for sitemap (only manga that should be indexed by search engines)
+router.get('/indexable', async (req, res) => {
+  try {
+    const { limit = 500 } = req.query;
+    const indexableManga = await Manga.find({ indexable: true })
+      .select('title slug lastUpdated')
+      .sort({ lastUpdated: -1 })
+      .limit(parseInt(limit))
+      .lean();
+    
+    res.json({
+      success: true,
+      data: indexableManga,
+      total: indexableManga.length
+    });
+  } catch (error) {
+    console.error('Error fetching indexable manga:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
 // Simple test endpoint to verify backend is working
 router.get('/test', async (req, res) => {
   try {
