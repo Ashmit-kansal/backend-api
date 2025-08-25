@@ -63,10 +63,20 @@ router.get('/', async (req, res) => {
 // Get specific genre by slug
 router.get('/:slug', async (req, res) => {
   try {
-    const genre = await Genre.findOne({ 
+    // Try exact slug match first
+    let genre = await Genre.findOne({ 
       slug: req.params.slug,
       isActive: true 
     }).select('name displayName color slug mangaIds isActive createdAt updatedAt');
+    
+    // If not found, try case-insensitive slug match
+    if (!genre) {
+      genre = await Genre.findOne({ 
+        slug: { $regex: new RegExp(`^${req.params.slug}$`, 'i') },
+        isActive: true 
+      }).select('name displayName color slug mangaIds isActive createdAt updatedAt');
+    }
+    
     if (!genre) {
       return res.status(404).json({
         success: false,
@@ -119,14 +129,21 @@ router.get('/:genre/manga', async (req, res) => {
     if (total === 0) {
       // Get all manga to find the exact case of the genre name
       const allManga = await Manga.find({}, 'genres');
-      const sampleManga = allManga.slice(0, 5);
       
       // Find the exact genre name from manga documents (case-insensitive)
-      const exactGenreName = sampleManga.find(manga => 
-        manga.genres && manga.genres.some(g => g.toLowerCase() === genreName.toLowerCase())
-      )?.genres?.find(g => g.toLowerCase() === genreName.toLowerCase());
+      let exactGenreName = null;
+      for (const mangaDoc of allManga) {
+        if (mangaDoc.genres && Array.isArray(mangaDoc.genres)) {
+          const foundGenre = mangaDoc.genres.find(g => g.toLowerCase() === genreName.toLowerCase());
+          if (foundGenre) {
+            exactGenreName = foundGenre;
+            break;
+          }
+        }
+      }
       
       if (exactGenreName) {
+        console.log(`Genre case correction: "${genreName}" -> "${exactGenreName}"`);
         // Use the exact genre name from the manga documents (with correct case)
         manga = await Manga.find({
           genres: { $in: [exactGenreName] }
@@ -139,6 +156,8 @@ router.get('/:genre/manga', async (req, res) => {
         total = await Manga.countDocuments({
           genres: { $in: [exactGenreName] }
         });
+      } else {
+        console.log(`No case-insensitive match found for genre: "${genreName}"`);
       }
     }
     
