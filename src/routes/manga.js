@@ -241,7 +241,7 @@ router.get('/', async (req, res) => {
         ...partialMatchConditions,
         ...containsMatchConditions
       ];
-      // console.log('🔍 Search words:', searchWords);
+      console.log('🔍 Search words:', searchWords);
     }
     // Genre filter
     if (genre) {
