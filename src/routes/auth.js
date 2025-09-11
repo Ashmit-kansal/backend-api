@@ -50,6 +50,7 @@ router.post('/register', async (req, res) => {
     // Generate and send OTP for email verification
     const otp = await OTP.createOTP(email, 'verification');
     await sendOTPEmail(email, otp, 'verification');
+    console.log(`📧 Registration OTP sent to: ${email} for user: ${username}`);
     res.json({
       success: true,
       message: 'Registration initiated! Please check your email for verification OTP.',
