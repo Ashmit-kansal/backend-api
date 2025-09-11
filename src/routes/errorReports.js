@@ -5,19 +5,19 @@ const ErrorReport = require('../models/ErrorReport');
 // Submit a new error report
 router.post('/', auth, async (req, res) => {
   try {
-    console.log('🔍 User ID from auth:', req.user.id);
+    // console.log('🔍 User ID from auth:', req.user.id);
     const { type, commentId, mangaId, chapterNumber, reason, description } = req.body;
     const userId = req.user.id;
-    console.log('🔍 Type check - type === "comment":', type === 'comment');
-    console.log('🔍 Type check - typeof type:', typeof type);
-    console.log('🔍 Type check - type length:', type ? type.length : 'undefined');
-    console.log('🔍 ChapterNumber details:', {
-      value: chapterNumber,
-      type: typeof chapterNumber,
-      isNull: chapterNumber === null,
-      isUndefined: chapterNumber === undefined,
-      stringValue: chapterNumber ? chapterNumber.toString() : 'null/undefined'
-    });
+    // console.log('🔍 Type check - type === "comment":', type === 'comment');
+    // console.log('🔍 Type check - typeof type:', typeof type);
+    // console.log('🔍 Type check - type length:', type ? type.length : 'undefined');
+    // console.log('🔍 ChapterNumber details:', {
+    //   value: chapterNumber,
+    //   type: typeof chapterNumber,
+    //   isNull: chapterNumber === null,
+    //   isUndefined: chapterNumber === undefined,
+    //   stringValue: chapterNumber ? chapterNumber.toString() : 'null/undefined'
+    // });
     // Validate required fields
     if (!type || !reason) {
       return res.status(400).json({
@@ -102,12 +102,12 @@ router.post('/', auth, async (req, res) => {
           });
         }
         defaulterId = comment.userId; // Comment model uses 'userId' field
-        console.log('🔍 Comment details:', {
-          mangaId: comment.mangaId,
-          chapterId: comment.chapterId,
-          mangaIdMatch: comment.mangaId.toString() === mangaId,
-          hasChapterId: !!comment.chapterId
-        });
+        // console.log('🔍 Comment details:', {
+        //   mangaId: comment.mangaId,
+        //   chapterId: comment.chapterId,
+        //   mangaIdMatch: comment.mangaId.toString() === mangaId,
+        //   hasChapterId: !!comment.chapterId
+        // });
         // Also verify that the comment belongs to the reported manga/chapter
         if (comment.mangaId.toString() !== mangaId) {
           return res.status(400).json({
@@ -117,13 +117,13 @@ router.post('/', auth, async (req, res) => {
         }
         // For comment reports, we need to check if the comment's chapterId matches the reported chapter
         // If chapterNumber is provided, we need to look up the chapter to get its number
-        console.log('🔍 Chapter validation check:', {
-          shouldValidate: !!(chapterNumber && comment.chapterId),
-          chapterNumber,
-          commentChapterId: comment.chapterId,
-          chapterNumberTruthy: !!chapterNumber,
-          commentChapterIdTruthy: !!comment.chapterId
-        });
+        // console.log('🔍 Chapter validation check:', {
+        //   shouldValidate: !!(chapterNumber && comment.chapterId),
+        //   chapterNumber,
+        //   commentChapterId: comment.chapterId,
+        //   chapterNumberTruthy: !!chapterNumber,
+        //   commentChapterIdTruthy: !!comment.chapterId
+        // });
         if (chapterNumber && comment.chapterId) {
           try {
             const Chapter = require('../models/Chapter');
@@ -132,11 +132,11 @@ router.post('/', auth, async (req, res) => {
               // Convert both to strings for comparison to handle number vs string mismatches
               const commentChapterNumber = chapter.chapterNumber.toString();
               const reportedChapterNumber = chapterNumber.toString();
-              console.log('🔍 Chapter validation:', {
-                commentChapterNumber,
-                reportedChapterNumber,
-                match: commentChapterNumber === reportedChapterNumber
-              });
+              // console.log('🔍 Chapter validation:', {
+              //   commentChapterNumber,
+              //   reportedChapterNumber,
+              //   match: commentChapterNumber === reportedChapterNumber
+              // });
               if (commentChapterNumber !== reportedChapterNumber) {
                 return res.status(400).json({
                   success: false,
@@ -158,26 +158,26 @@ router.post('/', auth, async (req, res) => {
     }
     // For chapter reports, defaulterId will remain null since we can't determine the author
     // Create the error report
-    console.log('🔍 Creating ErrorReport with data:', {
-      type: normalizedType,
-      userId,
-      commentId,
-      mangaId,
-      chapterNumber,
-      defaulterId,
-      reason,
-      description: description || ''
-    });
+    // console.log('🔍 Creating ErrorReport with data:', {
+    //   type: normalizedType,
+    //   userId,
+    //   commentId,
+    //   mangaId,
+    //   chapterNumber,
+    //   defaulterId,
+    //   reason,
+    //   description: description || ''
+    // });
     // Additional debugging for chapter reports
     if (normalizedType === 'chapter') {
-      console.log('🔍 Chapter report details:', {
-        mangaId,
-        chapterNumber,
-        mangaIdType: typeof mangaId,
-        chapterNumberType: typeof chapterNumber,
-        mangaIdTruthy: !!mangaId,
-        chapterNumberTruthy: !!chapterNumber
-      });
+      // console.log('🔍 Chapter report details:', {
+      //   mangaId,
+      //   chapterNumber,
+      //   mangaIdType: typeof mangaId,
+      //   chapterNumberType: typeof chapterNumber,
+      //   mangaIdTruthy: !!mangaId,
+      //   chapterNumberTruthy: !!chapterNumber
+      // });
     }
     const errorReport = new ErrorReport({
       type: normalizedType,
@@ -189,7 +189,7 @@ router.post('/', auth, async (req, res) => {
       reason,
       description: description || ''
     });
-    console.log('🔍 About to save ErrorReport...');
+    // console.log('🔍 About to save ErrorReport...');
     await errorReport.save();
     res.status(201).json({
       success: true,

@@ -143,7 +143,7 @@ router.get('/:genre/manga', async (req, res) => {
       }
       
       if (exactGenreName) {
-        console.log(`Genre case correction: "${genreName}" -> "${exactGenreName}"`);
+        // console.log(`Genre case correction: "${genreName}" -> "${exactGenreName}"`);
         // Use the exact genre name from the manga documents (with correct case)
         manga = await Manga.find({
           genres: { $in: [exactGenreName] }
@@ -157,7 +157,7 @@ router.get('/:genre/manga', async (req, res) => {
           genres: { $in: [exactGenreName] }
         });
       } else {
-        console.log(`No case-insensitive match found for genre: "${genreName}"`);
+        // console.log(`No case-insensitive match found for genre: "${genreName}"`);
       }
     }
     

@@ -7,14 +7,14 @@ const auth = require('../middleware/auth');
 const mongoose = require('mongoose');
 // Debug middleware to log all requests to bookmarks router
 router.use((req, res, next) => {
-  console.log('📚 Bookmarks Router - Request received:', {
-    method: req.method,
-    url: req.url,
-    path: req.path,
-    params: req.params,
-    body: req.body,
-    user: req.user ? req.user._id : 'No user'
-  });
+  // console.log('📚 Bookmarks Router - Request received:', {
+  //   method: req.method,
+  //   url: req.url,
+  //   path: req.path,
+  //   params: req.params,
+  //   body: req.body,
+  //   user: req.user ? req.user._id : 'No user'
+  // });
   next();
 });
 // Apply auth middleware to all bookmark routes
@@ -22,10 +22,10 @@ router.use(auth);
 // Get user's bookmarks
 router.get('/', async (req, res) => {
   try {
-    console.log('🔍 GET /bookmarks - User object:', req.user);
+    // console.log('🔍 GET /bookmarks - User object:', req.user);
     // Debug: Check collection names
-    console.log('  - Bookmark collection:', Bookmark.collection.name);
-    console.log('  - Chapter collection:', Chapter.collection.name);
+    // console.log('  - Bookmark collection:', Bookmark.collection.name);
+    // console.log('  - Chapter collection:', Chapter.collection.name);
     // Use aggregation pipeline to get bookmarks with latest chapters and full chapter list
     const bookmarksWithLatestChapters = await Bookmark.aggregate([
       // Match bookmarks for the current user
@@ -139,18 +139,18 @@ router.get('/', async (req, res) => {
       }
     ]);
     // Debug: Log each bookmark's structure
-    bookmarksWithLatestChapters.forEach((bookmark, index) => {
-      console.log(`🔍 Bookmark ${index + 1}:`, {
-        bookmarkId: bookmark._id,
-        mangaId: bookmark.mangaId._id,
-        mangaTitle: bookmark.mangaId.title,
-        userId: bookmark.userId,
-        lastReadChapter: bookmark.lastReadId?.chapterNumber,
-        latestChapter: bookmark.latestChapter?.chapterNumber,
-        totalChapters: bookmark.allChapters?.length || 0,
-        readingProgress: bookmark.readingProgress ? `${(bookmark.readingProgress * 100).toFixed(1)}%` : 'N/A'
-      });
-    });
+    // bookmarksWithLatestChapters.forEach((bookmark, index) => {
+    //   console.log(`🔍 Bookmark ${index + 1}:`, {
+    //     bookmarkId: bookmark._id,
+    //     mangaId: bookmark.mangaId._id,
+    //     mangaTitle: bookmark.mangaId.title,
+    //     userId: bookmark.userId,
+    //     lastReadChapter: bookmark.lastReadId?.chapterNumber,
+    //     latestChapter: bookmark.latestChapter?.chapterNumber,
+    //     totalChapters: bookmark.allChapters?.length || 0,
+    //     readingProgress: bookmark.readingProgress ? `${(bookmark.readingProgress * 100).toFixed(1)}%` : 'N/A'
+    //   });
+    // });
     res.json({
       success: true,
       data: bookmarksWithLatestChapters
@@ -166,7 +166,7 @@ router.get('/', async (req, res) => {
 // Add bookmark
 router.post('/', async (req, res) => {
   try {
-    console.log('📚 POST /bookmarks - User ID:', req.user._id);
+    // console.log('📚 POST /bookmarks - User ID:', req.user._id);
     const { mangaId, lastReadId } = req.body;
     // Validate required fields
     if (!mangaId) {
@@ -210,13 +210,13 @@ router.post('/', async (req, res) => {
       lastReadId: firstChapter ? firstChapter._id : (lastReadId || null), // Use lowest chapter if available, otherwise use provided lastReadId or null
       userId: req.user._id
     });
-    console.log('📚 POST /bookmarks - Bookmark object before save:', {
-      mangaId: bookmark.mangaId,
-      lastReadId: bookmark.lastReadId,
-      userId: bookmark.userId,
-      firstChapterFound: !!firstChapter,
-      firstChapterDetails: firstChapter ? { id: firstChapter._id, number: firstChapter.chapterNumber, title: firstChapter.title } : null
-    });
+    // console.log('📚 POST /bookmarks - Bookmark object before save:', {
+    //   mangaId: bookmark.mangaId,
+    //   lastReadId: bookmark.lastReadId,
+    //   userId: bookmark.userId,
+    //   firstChapterFound: !!firstChapter,
+    //   firstChapterDetails: firstChapter ? { id: firstChapter._id, number: firstChapter.chapterNumber, title: firstChapter.title } : null
+    // });
     await bookmark.save();
     // Increment bookmarkCount in manga stats
     await Manga.findByIdAndUpdate(mangaId, {
@@ -248,18 +248,18 @@ router.post('/', async (req, res) => {
 // Update bookmark progress
 router.put('/:mangaId/progress', async (req, res) => {
   try {
-    console.log('📚 PUT /progress/:mangaId - Params:', req.params);
-    console.log('📚 PUT /progress/:mangaId - User ID:', req.user._id);
-    console.log('📚 PUT /progress/:mangaId - Manga ID from params:', req.params.mangaId);
+    // console.log('📚 PUT /progress/:mangaId - Params:', req.params);
+    // console.log('📚 PUT /progress/:mangaId - User ID:', req.user._id);
+    // console.log('📚 PUT /progress/:mangaId - Manga ID from params:', req.params.mangaId);
     const { lastReadId } = req.body;
     // Convert string IDs to ObjectIds for comparison
     const userId = new mongoose.Types.ObjectId(req.user._id);
     const mangaId = new mongoose.Types.ObjectId(req.params.mangaId);
-    console.log('📚 PUT /progress/:mangaId - Converted Manga ID:', mangaId);
-    console.log('📚 PUT /progress/:mangaId - Looking for bookmark with criteria:', {
-      userId: userId,
-      mangaId: mangaId
-    });
+    // console.log('📚 PUT /progress/:mangaId - Converted Manga ID:', mangaId);
+    // console.log('📚 PUT /progress/:mangaId - Looking for bookmark with criteria:', {
+    //   userId: userId,
+    //   mangaId: mangaId
+    // });
     // First, let's check if the bookmark exists at all
     const existingBookmark = await Bookmark.findOne({
       userId: userId,
@@ -277,10 +277,10 @@ router.put('/:mangaId/progress', async (req, res) => {
       { lastReadId: lastReadId },
       { new: true }
     );
-    console.log('📚 PUT /progress/:mangaId - Updated lastReadId:', bookmark.lastReadId);
+    // console.log('📚 PUT /progress/:mangaId - Updated lastReadId:', bookmark.lastReadId);
     // Verify the update by fetching the bookmark again
     const verifyBookmark = await Bookmark.findById(bookmark._id).populate('lastReadId');
-    console.log('📚 PUT /progress/:mangaId - Verification - lastReadId populated:', verifyBookmark.lastReadId);
+    // console.log('📚 PUT /progress/:mangaId - Verification - lastReadId populated:', verifyBookmark.lastReadId);
     res.json({
       success: true,
       data: bookmark

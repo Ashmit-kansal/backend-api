@@ -241,7 +241,7 @@ router.get('/', async (req, res) => {
         ...partialMatchConditions,
         ...containsMatchConditions
       ];
-      console.log('🔍 Search words:', searchWords);
+      // console.log('🔍 Search words:', searchWords);
     }
     // Genre filter
     if (genre) {
@@ -273,10 +273,10 @@ router.get('/', async (req, res) => {
         // Debug: Show some manga titles from the database to see what's available
         try {
           const sampleManga = await Manga.find({}).select('title alternativeTitles').limit(5);
-          console.log('🔍 Sample manga in database:', sampleManga.map(m => ({
-            title: m.title,
-            alternativeTitles: m.alternativeTitles
-          })));
+          // console.log('🔍 Sample manga in database:', sampleManga.map(m => ({
+          //   title: m.title,
+          //   alternativeTitles: m.alternativeTitles
+          // })));
           // Test basic regex search
           const testSearch = await Manga.find({ title: { $regex: search, $options: 'i' } }).select('title').limit(3);
         } catch (debugError) {

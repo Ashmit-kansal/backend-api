@@ -86,14 +86,14 @@ router.post('/', auth, async (req, res) => {
     try {
       const manga = await Manga.findById(mangaId);
       if (manga) {
-        console.log(`🔍 Rating update debug for manga ${mangaId}:`, {
-          isNewRating,
-          oldRating,
-          newRating: rating,
-          currentStats: manga.stats,
-          currentTotal: manga.stats.totalRatings || 0,
-          currentAvg: manga.stats.averageRating || 0
-        });
+        // console.log(`🔍 Rating update debug for manga ${mangaId}:`, {
+        //   isNewRating,
+        //   oldRating,
+        //   newRating: rating,
+        //   currentStats: manga.stats,
+        //   currentTotal: manga.stats.totalRatings || 0,
+        //   currentAvg: manga.stats.averageRating || 0
+        // });
         if (isNewRating) {
           // New rating: increment total and recalculate average
           const currentTotal = manga.stats.totalRatings || 0;
@@ -114,12 +114,12 @@ router.post('/', auth, async (req, res) => {
           }
           manga.stats.totalRatings = newTotal;
           manga.stats.averageRating = Math.round(newAvg * 10) / 10; // Round to 1 decimal
-          console.log(`📊 New rating calculation:`, {
-            currentTotal,
-            currentAvg,
-            newTotal,
-            newAvg: manga.stats.averageRating
-          });
+          // console.log(`📊 New rating calculation:`, {
+          //   currentTotal,
+          //   currentAvg,
+          //   newTotal,
+          //   newAvg: manga.stats.averageRating
+          // });
         } else {
           // Updated rating: recalculate average (total stays the same)
           const currentTotal = manga.stats.totalRatings || 0;
@@ -128,14 +128,14 @@ router.post('/', auth, async (req, res) => {
             // Calculate new average by removing old rating and adding new one
             const totalWithoutOld = (currentAvg * currentTotal) - oldRating;
             const newAvg = (totalWithoutOld + rating) / currentTotal;
-            console.log(`📊 Rating update calculation:`, {
-              currentTotal,
-              currentAvg,
-              oldRating,
-              newRating: rating,
-              totalWithoutOld,
-              newAvg
-            });
+            // console.log(`📊 Rating update calculation:`, {
+            //   currentTotal,
+            //   currentAvg,
+            //   oldRating,
+            //   newRating: rating,
+            //   totalWithoutOld,
+            //   newAvg
+            // });
             // Validate the calculation result
             if (isNaN(newAvg) || !isFinite(newAvg)) {
               console.warn(`⚠️ Invalid average calculation for manga ${mangaId}, using fallback`);
