@@ -194,7 +194,7 @@ router.get('/search-test', async (req, res) => {
 // Get all manga with pagination and search
 router.get('/', async (req, res) => {
   try {
-    const { page = 1, limit = 20, search = '', genre = '', status = '' } = req.query;
+    const { page = 1, limit = 20, search = '', genre = '', status = '', sortBy = 'lastUpdated', sortOrder = 'desc' } = req.query;
     const query = {};
     // Search functionality
     if (search) {
@@ -253,7 +253,31 @@ router.get('/', async (req, res) => {
     }
     const skip = (page - 1) * limit;
     let manga;
+    
+    // Build sort options based on sortBy and sortOrder parameters
+    const sortDirection = sortOrder === 'asc' ? 1 : -1;
     let sortOptions = {};
+    
+    // Map frontend sortBy values to database field names
+    switch (sortBy) {
+      case 'rating':
+        sortOptions = { 'stats.averageRating': sortDirection, 'stats.totalRatings': -1 };
+        break;
+      case 'views':
+        sortOptions = { 'stats.views': sortDirection };
+        break;
+      case 'bookmarks':
+        sortOptions = { 'stats.bookmarkCount': sortDirection };
+        break;
+      case 'totalRatings':
+        sortOptions = { 'stats.totalRatings': sortDirection };
+        break;
+      case 'lastUpdated':
+      default:
+        sortOptions = { lastUpdated: sortDirection };
+        break;
+    }
+    
     if (search) {
       // For search queries, use intelligent sorting based on relevance
       const allResults = await Manga.find(query)
@@ -283,10 +307,10 @@ router.get('/', async (req, res) => {
         }
       }
     } else {
-      // For regular queries, sort by lastUpdated
+      // For regular queries, use the specified sort options
       manga = await Manga.find(query)
         .select('_id slug title coverImage genres status authors description stats lastUpdated alternativeTitles')
-        .sort({ lastUpdated: -1 })
+        .sort(sortOptions)
         .skip(skip)
         .limit(parseInt(limit));
     }
