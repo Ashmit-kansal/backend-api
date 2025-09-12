@@ -128,7 +128,7 @@ router.get('/latest', async (req, res) => {
   try {
     const { limit = 10 } = req.query;
     const chapters = await Chapter.find()
-      .sort({ publishedAt: -1 })
+      .sort({ scrapedAt: -1 })
       .limit(parseInt(limit))
       .populate('mangaId', 'title coverImage');
     res.json({
