@@ -8,6 +8,8 @@ function calculateRelevanceScore(manga, searchQuery) {
   const query = searchQuery.toLowerCase();
   const title = manga.title.toLowerCase();
   const altTitles = (manga.alternativeTitles || []).map(t => t.toLowerCase());
+  
+  
   // Exact title match (highest priority)
   if (title === query) {
     score += 1000;
@@ -235,12 +237,32 @@ router.get('/', async (req, res) => {
           containsMatchConditions.push({ description: { $regex: escapedWord, $options: 'i' } });
         }
       });
-      // Combine all conditions with priority order
+      // Combine all conditions with priority order - use a simpler approach
       query.$or = [
-        ...exactMatchConditions,
-        ...partialMatchConditions,
-        ...containsMatchConditions
+        // Exact matches first (highest priority)
+        { title: { $regex: `^${search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, $options: 'i' } },
+        { alternativeTitles: { $regex: `^${search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, $options: 'i' } },
+        // Starts with matches
+        { title: { $regex: `^${search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`, $options: 'i' } },
+        { alternativeTitles: { $regex: `^${search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`, $options: 'i' } },
+        // Contains matches
+        { title: { $regex: search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), $options: 'i' } },
+        { alternativeTitles: { $regex: search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), $options: 'i' } }
       ];
+      
+      // Add word-based matches for multi-word searches
+      if (searchWords.length > 1) {
+        searchWords.forEach(word => {
+          if (word.length >= 2) {
+            const escapedWord = word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            query.$or.push(
+              { title: { $regex: escapedWord, $options: 'i' } },
+              { alternativeTitles: { $regex: escapedWord, $options: 'i' } }
+            );
+          }
+        });
+      }
+      
       console.log('🔍 Search words:', searchWords);
     }
     // Genre filter
@@ -291,21 +313,7 @@ router.get('/', async (req, res) => {
       });
       // Take only the top 5 most relevant results
       manga = sortedResults.slice(0, 5);
-      if (manga.length > 0) {
-        console.log('🔍 All results:', manga.map(m => m.title));
-      } else {
-        // Debug: Show some manga titles from the database to see what's available
-        try {
-          const sampleManga = await Manga.find({}).select('title alternativeTitles').limit(5);
-          // console.log('🔍 Sample manga in database:', sampleManga.map(m => ({
-          //   title: m.title,
-          //   alternativeTitles: m.alternativeTitles
-          // })));
-          // Test basic regex search
-          const testSearch = await Manga.find({ title: { $regex: search, $options: 'i' } }).select('title').limit(3);
-        } catch (debugError) {
-        }
-      }
+      console.log('🔍 Search results:', manga.map(m => m.title));
     } else {
       // For regular queries, use the specified sort options
       manga = await Manga.find(query)
