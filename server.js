@@ -8,6 +8,10 @@ require('dotenv').config();
 
 const app = express();
 
+// Trust proxy for Railway and other cloud platforms
+// This is required for express-rate-limit to work correctly with X-Forwarded-For headers
+app.set('trust proxy', 1);
+
 // Security middleware
 app.use(helmet({
   contentSecurityPolicy: {
