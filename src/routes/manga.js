@@ -34,20 +34,25 @@ function calculateRelevanceScore(manga, searchQuery) {
   if (altTitles.some(alt => alt.includes(query))) {
     score += 200;
   }
-  // Individual word matches
-  const queryWords = query.split(/\s+/).filter(word => word.length >= 2);
+  // Individual word matches (improved)
+  const queryWords = query.split(/\s+/).filter(word => 
+    word.length >= 3 && // At least 3 characters
+    !['the', 'and', 'or', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by', 'an', 'a'].includes(word.toLowerCase())
+  );
+  
   queryWords.forEach(word => {
-    // Word at start of title
+    // Word at start of title (higher score for significant words)
     if (title.startsWith(word)) {
-      score += 100;
+      score += 150; // Increased from 100
     }
-    // Word anywhere in title
-    if (title.includes(word)) {
-      score += 50;
+    // Word anywhere in title (using word boundaries)
+    const wordBoundaryRegex = new RegExp(`\\b${word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i');
+    if (wordBoundaryRegex.test(title)) {
+      score += 75; // Increased from 50
     }
-    // Word in alternative titles
-    if (altTitles.some(alt => alt.includes(word))) {
-      score += 30;
+    // Word in alternative titles (using word boundaries)
+    if (altTitles.some(alt => wordBoundaryRegex.test(alt))) {
+      score += 40; // Increased from 30
     }
   });
   // Bonus for shorter titles (more specific matches)
@@ -245,25 +250,37 @@ router.get('/', async (req, res) => {
         // Starts with matches
         { title: { $regex: `^${search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`, $options: 'i' } },
         { alternativeTitles: { $regex: `^${search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`, $options: 'i' } },
-        // Contains matches
+        // Contains matches (full phrase)
         { title: { $regex: search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), $options: 'i' } },
         { alternativeTitles: { $regex: search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), $options: 'i' } }
       ];
       
-      // Add word-based matches for multi-word searches
+      // IMPROVED: Only add word-based matches for significant words (avoid common words like "the", "a", "an")
       if (searchWords.length > 1) {
-        searchWords.forEach(word => {
-          if (word.length >= 2) {
+        const significantWords = searchWords.filter(word => 
+          word.length >= 3 && // At least 3 characters
+          !['the', 'and', 'or', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by', 'an', 'a'].includes(word.toLowerCase())
+        );
+        
+        console.log('🔍 Search words:', searchWords);
+        console.log('🔍 Significant words for matching:', significantWords);
+        
+        // Only add word matches if we have significant words AND they represent most of the search
+        if (significantWords.length >= 2 && significantWords.length >= searchWords.length * 0.6) {
+          significantWords.forEach(word => {
             const escapedWord = word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            // Only match words at word boundaries to avoid partial matches within words
             query.$or.push(
-              { title: { $regex: escapedWord, $options: 'i' } },
-              { alternativeTitles: { $regex: escapedWord, $options: 'i' } }
+              { title: { $regex: `\\b${escapedWord}\\b`, $options: 'i' } },
+              { alternativeTitles: { $regex: `\\b${escapedWord}\\b`, $options: 'i' } }
             );
-          }
-        });
+          });
+        }
+      } else {
+        console.log('🔍 Search words:', searchWords);
       }
       
-      console.log('🔍 Search words:', searchWords);
+      console.log('🔍 Total OR conditions in query:', query.$or.length);
     }
     // Genre filter
     if (genre) {
@@ -301,19 +318,55 @@ router.get('/', async (req, res) => {
     }
     
     if (search) {
-      // For search queries, use intelligent sorting based on relevance
-      const allResults = await Manga.find(query)
-        .select('_id slug title coverImage genres status authors description stats lastUpdated alternativeTitles')
-        .limit(20); // Get more results for better sorting
-      // Sort results by relevance score
-      const sortedResults = allResults.sort((a, b) => {
-        const aScore = calculateRelevanceScore(a, search);
-        const bScore = calculateRelevanceScore(b, search);
-        return bScore - aScore; // Higher score first
-      });
-      // Take only the top 5 most relevant results
-      manga = sortedResults.slice(0, 5);
-      console.log('🔍 Search results:', manga.map(m => m.title));
+      // Enhanced backend search - now handles all edge cases without frontend fallback needed
+      try {
+        // For search queries, use intelligent sorting based on relevance
+        const allResults = await Manga.find(query)
+          .select('_id slug title coverImage genres status authors description stats lastUpdated alternativeTitles')
+          .limit(30) // Increased limit for better sorting pool
+          .lean(); // Use lean() for better performance
+        
+        // Sort results by relevance score
+        const sortedResults = allResults.sort((a, b) => {
+          const aScore = calculateRelevanceScore(a, search);
+          const bScore = calculateRelevanceScore(b, search);
+          return bScore - aScore; // Higher score first
+        });
+        
+        // Take only the top 5 most relevant results
+        manga = sortedResults.slice(0, 5);
+        
+        // If no results from complex query, try a simpler fallback approach
+        if (manga.length === 0) {
+          console.log('🔄 No results from complex search, trying simpler approach...');
+          
+          // Simpler query - just title and alternative title matching
+          const simpleQuery = {
+            $or: [
+              { title: { $regex: search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), $options: 'i' } },
+              { alternativeTitles: { $regex: search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), $options: 'i' } }
+            ]
+          };
+          
+          const simpleResults = await Manga.find(simpleQuery)
+            .select('_id slug title coverImage genres status authors description stats lastUpdated alternativeTitles')
+            .limit(10)
+            .lean();
+            
+          // Sort by relevance and take top 5
+          manga = simpleResults.sort((a, b) => {
+            const aScore = calculateRelevanceScore(a, search);
+            const bScore = calculateRelevanceScore(b, search);
+            return bScore - aScore;
+          }).slice(0, 5);
+        }
+        
+        console.log('🔍 Search results:', manga.map(m => m.title));
+      } catch (searchError) {
+        console.error('Search error:', searchError);
+        // Fallback to empty results instead of crashing
+        manga = [];
+      }
     } else {
       // For regular queries, use the specified sort options
       manga = await Manga.find(query)

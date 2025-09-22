@@ -191,10 +191,7 @@ app.get('/api/test-cors', (req, res) => {
 // Database connection
 logger.info('Attempting to connect to MongoDB');
 
-mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/manga-reader', {
-  useNewUrlParser: true,
-  useUnifiedTopology: true,
-})
+mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/manga-reader')
 .then(() => {
   logger.info('MongoDB connected successfully');
   startServer();
