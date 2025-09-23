@@ -109,43 +109,35 @@ router.get('/recent-with-chapters', async (req, res) => {
     // Now try the full aggregation pipeline
     const mangaWithChapters = await Manga.aggregate([
       // Stage 1: Sort manga by lastUpdated (most recent first)
-      {
-        $sort: { lastUpdated: -1 }
-      },
+      { $sort: { lastUpdated: -1 } },
       // Stage 2: Skip for pagination
-      {
-        $skip: skip
-      },
+      { $skip: skip },
       // Stage 3: Limit results
-      {
-        $limit: parsedLimit
-      },
-      // Stage 4: Lookup chapters for each manga
+      { $limit: parsedLimit },
+      // Stage 4: Lookup only the last 3 chapters for each manga
       {
         $lookup: {
           from: 'chapters',
-          localField: '_id',
-          foreignField: 'mangaId',
+          let: { mangaId: '$_id' },
+          pipeline: [
+            { $match: { $expr: { $eq: ['$mangaId', '$$mangaId'] } } },
+            { $sort: { chapterNumber: -1 } },
+            { $limit: 3 },
+            { $project: {
+                _id: 1,
+                chapterNumber: 1,
+                title: 1,
+                createdAt: 1,
+                scrapedAt: 1,
+                lastUpdated: 1,
+                views: 1
+              }
+            }
+          ],
           as: 'chapters'
         }
       },
-      // Stage 5: Sort chapters by chapterNumber and limit to 3
-      {
-        $addFields: {
-          chapters: {
-            $slice: [
-              {
-                $sortArray: {
-                  input: '$chapters',
-                  sortBy: { chapterNumber: -1 }
-                }
-              },
-              3
-            ]
-          }
-        }
-      },
-      // Stage 6: Project only the fields we need
+      // Stage 5: Project only the fields we need
       {
         $project: {
           _id: 1,
@@ -158,18 +150,10 @@ router.get('/recent-with-chapters', async (req, res) => {
           stats: 1,
           lastUpdated: 1,
           slug: 1,
-          chapters: {
-            _id: 1,
-            chapterNumber: 1,
-            title: 1,
-            createdAt: 1,
-            scrapedAt: 1,
-            lastUpdated: 1,
-            views: 1
-          }
+          chapters: 1
         }
       }
-    ]);
+    ])
     // console.log(`🔍 Aggregation result: expected ${parsedLimit}, got ${mangaWithChapters.length}`);
     // Get total count for pagination
     const total = await Manga.countDocuments();
