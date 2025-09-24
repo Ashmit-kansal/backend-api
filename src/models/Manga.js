@@ -75,6 +75,12 @@ const mangaSchema = new mongoose.Schema({
     type: Boolean,
     default: true // Control whether manga should be indexed by search engines
   }
+  ,
+  shouldNotCheck: {
+    type: Boolean,
+    default: false, // If true, auto-updater will skip this manga
+    index: true
+  }
 }, {
   timestamps: true
 });
