@@ -413,9 +413,11 @@ router.get('/slug/:slug', async (req, res) => {
       ...manga.toObject(),
       chapters: chapters
     };
-    // Increment views
-    manga.stats.views += 1;
-    await manga.save();
+    // Increment views unless explicitly skipped (e.g., metadata fetch from chapter page)
+    if (!req.query.skipIncrement) {
+      manga.stats.views += 1;
+      await manga.save();
+    }
     res.json({
       success: true,
       data: mangaWithChapters
