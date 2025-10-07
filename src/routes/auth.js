@@ -12,6 +12,20 @@ const R2ImageUploadService = require('../services/r2ImageUploadService');
 const Manga = require('../models/Manga'); // Added Manga model import
 const OTP = require('../models/OTP');
 const { sendOTPEmail, sendWelcomeEmail } = require('../services/emailService');
+const rateLimit = require('express-rate-limit');
+
+// OTP related rate limiter: max 10 requests per hour per IP
+// Applies to routes that generate or resend OTP codes (register, send-otp, resend-otp, forgot-password)
+const otpLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    success: false,
+    message: 'Too many OTP requests from this IP. Please try again after an hour.'
+  }
+});
 // Configure multer for file uploads
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -27,7 +41,8 @@ const upload = multer({
   }
 });
 // Register user - only creates a temporary record, user is created after OTP verification
-router.post('/register', async (req, res) => {
+// Includes OTP send, so apply limiter
+router.post('/register', otpLimiter, async (req, res) => {
   try {
     const { username, email, password, name } = req.body;
     // Check if user already exists
@@ -465,7 +480,7 @@ router.get('/avatar-info', auth, async (req, res) => {
   }
 });
 // Send OTP for email verification
-router.post('/send-otp', async (req, res) => {
+router.post('/send-otp', otpLimiter, async (req, res) => {
   try {
     const { email, purpose } = req.body;
     if (!email || !purpose) {
@@ -534,7 +549,7 @@ router.post('/verify-otp', async (req, res) => {
   }
 });
 // Resend OTP
-router.post('/resend-otp', async (req, res) => {
+router.post('/resend-otp', otpLimiter, async (req, res) => {
   try {
     const { email, purpose } = req.body;
     if (!email || !purpose) {
@@ -568,7 +583,7 @@ router.post('/resend-otp', async (req, res) => {
   }
 });
 // Forgot password
-router.post('/forgot-password', async (req, res) => {
+router.post('/forgot-password', otpLimiter, async (req, res) => {
   try {
     const { email } = req.body;
     if (!email) {

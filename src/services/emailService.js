@@ -1,19 +1,82 @@
-const sgMail = require('@sendgrid/mail');
+const nodemailer = require('nodemailer');
 require('dotenv').config();
-// Configure SendGrid
-const sendGridApiKey = process.env.MANGA_READER_EMAIL;
-if (sendGridApiKey) {
-  sgMail.setApiKey(sendGridApiKey);
-} else {
-  console.warn('SendGrid API key not found. Email functionality will be disabled.');
+
+// Provider selection simplified: smtp | mock (default smtp if SMTP vars exist)
+const EMAIL_PROVIDER = (process.env.EMAIL_PROVIDER || '').toLowerCase();
+
+// ===================== SMTP (Zoho) SETUP =====================
+// Expected env vars for Zoho:
+// SMTP_HOST=smtp.zoho.in (or smtp.zoho.com)
+// SMTP_PORT=465 (SSL) or 587 (STARTTLS)
+// SMTP_SECURE=true when 465 else false
+// SMTP_USER=your@domain.com
+// SMTP_PASS=app_password (NOT your main account password)
+let smtpTransport = null;
+if (EMAIL_PROVIDER === 'smtp' || EMAIL_PROVIDER === '' ) {
+  let { SMTP_HOST, SMTP_PORT, SMTP_SECURE, SMTP_USER, SMTP_PASS } = process.env;
+  const originalUser = SMTP_USER || '';
+  const originalPass = SMTP_PASS || '';
+  if (SMTP_USER) SMTP_USER = SMTP_USER.trim();
+  if (SMTP_PASS) SMTP_PASS = SMTP_PASS.trim();
+  if (originalUser !== SMTP_USER || originalPass !== SMTP_PASS) {
+    console.warn('[Email] Trimmed whitespace from SMTP_USER or SMTP_PASS');
+  }
+  if (SMTP_HOST && SMTP_PORT && SMTP_USER && SMTP_PASS) {
+    smtpTransport = nodemailer.createTransport({
+      host: SMTP_HOST,
+      port: Number(SMTP_PORT),
+      secure: SMTP_SECURE === 'true' || SMTP_PORT === '465',
+      auth: { user: SMTP_USER, pass: SMTP_PASS },
+      tls: { rejectUnauthorized: true }
+    });
+  } else if (EMAIL_PROVIDER === 'smtp') {
+    console.warn('[Email] SMTP provider selected but required SMTP_* env vars are missing. Falling back to mock mode.');
+  }
 }
+
+// ===================== MOCK MODE =====================
+const isMock = (EMAIL_PROVIDER === 'mock') || (EMAIL_PROVIDER !== 'smtp' && !smtpTransport);
+
+function logProviderConfig() {
+  console.log('[Email] Provider init:', {
+    providerRequested: EMAIL_PROVIDER || '(auto)',
+    usingProvider: isMock ? 'mock' : 'smtp',
+    hasSmtpTransport: !!smtpTransport
+  });
+}
+logProviderConfig();
+// ===================== CORE SENDER (Provider Agnostic) =====================
+async function sendViaProvider({ to, subject, html }) {
+  if (isMock) {
+    console.log('[Email MOCK] Would send to', to, 'subject:', subject);
+    return true;
+  }
+  if (!isMock) {
+    if (!smtpTransport) {
+      console.warn('[Email] SMTP transport unavailable. Falling back to mock.');
+      return true;
+    }
+    try {
+      await smtpTransport.sendMail({
+        from: process.env.FROM_EMAIL || process.env.SMTP_USER,
+        to,
+        subject,
+        html
+      });
+    } catch (err) {
+      if (err && err.code === 'EAUTH') {
+        console.error('[Email] Authentication failed. Check SMTP_USER/SMTP_PASS, app password, host/port, or region.');
+      }
+      throw err;
+    }
+    return true;
+  }
+  return true;
+}
+
+// ===================== PUBLIC API =====================
 const sendOTPEmail = async (email, otp, purpose = 'verification') => {
   try {
-    // Check if SendGrid is configured
-    if (!sendGridApiKey) {
-      console.log(`[DEBUG] SendGrid API key not found. Please check your .env file.`);
-      return true; // Return true for development/testing
-    }
     const subject = purpose === 'verification' 
       ? 'Email Verification - Manga Reader' 
       : 'Password Reset - Manga Reader';
@@ -48,25 +111,11 @@ const sendOTPEmail = async (email, otp, purpose = 'verification') => {
         </div>
       </div>
     `;
-    const fromEmail = process.env.FROM_EMAIL || 'noreply@mangareader.com';
-    const msg = {
-      to: email,
-      from: fromEmail,
-      subject: subject,
-      html: htmlContent,
-    };
-    console.log(`[DEBUG] Sending email with config:`, {
-      to: email,
-      from: fromEmail,
-      subject: subject,
-      hasApiKey: !!sendGridApiKey
-    });
-    await sgMail.send(msg);
+    await sendViaProvider({ to: email, subject, html: htmlContent });
     return true;
   } catch (error) {
     console.error('❌ Error sending OTP email:', error);
-    // For development, log the OTP instead of failing
-    if (process.env.NODE_ENV === 'development' || !sendGridApiKey) {
+    if (process.env.NODE_ENV === 'development' || isMock) {
       console.log(`[DEV MODE] In production, this would be sent via email`);
       return true;
     }
@@ -75,10 +124,6 @@ const sendOTPEmail = async (email, otp, purpose = 'verification') => {
 };
 const sendWelcomeEmail = async (email, username) => {
   try {
-    // Check if SendGrid is configured
-    if (!sendGridApiKey) {
-      return true;
-    }
     const htmlContent = `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f9f9f9;">
         <div style="background-color: #ffffff; padding: 30px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">
@@ -102,18 +147,11 @@ const sendWelcomeEmail = async (email, username) => {
         </div>
       </div>
     `;
-    const fromEmail = process.env.FROM_EMAIL || 'noreply@mangareader.com';
-    const msg = {
-      to: email,
-      from: fromEmail,
-      subject: 'Welcome to Manga Reader!',
-      html: htmlContent,
-    };
-    await sgMail.send(msg);
+    await sendViaProvider({ to: email, subject: 'Welcome to Manga Reader!', html: htmlContent });
     return true;
   } catch (error) {
     console.error('❌ Error sending welcome email:', error);
-    if (process.env.NODE_ENV === 'development' || !sendGridApiKey) {
+    if (process.env.NODE_ENV === 'development' || isMock) {
       return true;
     }
     throw new Error('Failed to send welcome email');
@@ -122,4 +160,4 @@ const sendWelcomeEmail = async (email, username) => {
 module.exports = {
   sendOTPEmail,
   sendWelcomeEmail
-};
+};

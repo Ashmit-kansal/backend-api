@@ -164,6 +164,10 @@ app.use((req, res, next) => {
   next();
 });
 
+// Health routes (lightweight) - placed early to avoid heavy middleware cost
+const emailHealthRouter = require('./src/routes/emailHealth');
+app.use('/api/health', emailHealthRouter);
+
 // Body parsing middleware with size limits
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
@@ -310,28 +314,25 @@ function startServer() {
     });
   });
 
-  // Graceful shutdown
-  process.on('SIGTERM', () => {
-    logger.info('SIGTERM received, shutting down gracefully');
-    server.close(() => {
+  async function graceful(signal){
+    logger.info(`${signal} received, initiating graceful shutdown`);
+    try {
+      await new Promise(resolve => server.close(resolve));
       logger.info('HTTP server closed');
-      mongoose.connection.close(false, () => {
+      if (mongoose.connection.readyState === 1) {
+        await mongoose.connection.close(false);
         logger.info('MongoDB connection closed');
-        process.exit(0);
-      });
-    });
-  });
-
-  process.on('SIGINT', () => {
-    logger.info('SIGINT received, shutting down gracefully');
-    server.close(() => {
-      logger.info('HTTP server closed');
-      mongoose.connection.close(false, () => {
-        logger.info('MongoDB connection closed');
-        process.exit(0);
-      });
-    });
-  });
+      } else {
+        logger.info('MongoDB connection not open (state=' + mongoose.connection.readyState + ')');
+      }
+      process.exit(0);
+    } catch (err) {
+      logger.error('Error during graceful shutdown', { error: err.message, stack: err.stack });
+      process.exit(1);
+    }
+  }
+  process.on('SIGTERM', () => graceful('SIGTERM'));
+  process.on('SIGINT', () => graceful('SIGINT'));
 }
 
 module.exports = app; 
