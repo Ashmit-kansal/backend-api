@@ -1,8 +1,15 @@
 const nodemailer = require('nodemailer');
 require('dotenv').config();
 
-// Provider selection simplified: smtp | mock (default smtp if SMTP vars exist)
+// Provider selection: smtp | zoho_api | mock (auto picks smtp if present, else zoho_api if configured)
 const EMAIL_PROVIDER = (process.env.EMAIL_PROVIDER || '').toLowerCase();
+
+// Region for Zoho (defaults to com) used only if zoho_api chosen
+const ZOHO_REGION = (process.env.ZOHO_REGION || 'com').trim();
+const ZOHO_ACCOUNT_ID = process.env.ZOHO_ACCOUNT_ID;
+const HAS_ZOHO_REFRESH = !!(process.env.ZOHO_CLIENT_ID && process.env.ZOHO_CLIENT_SECRET && process.env.ZOHO_REFRESH_TOKEN);
+const HAS_ZOHO_TOKEN = !!process.env.ZOHO_MAIL_OAUTH_TOKEN;
+const CAN_USE_ZOHO_API = !!ZOHO_ACCOUNT_ID && (HAS_ZOHO_REFRESH || HAS_ZOHO_TOKEN);
 
 // ===================== SMTP (Zoho) SETUP =====================
 // Expected env vars for Zoho:
@@ -34,14 +41,79 @@ if (EMAIL_PROVIDER === 'smtp' || EMAIL_PROVIDER === '' ) {
   }
 }
 
-// ===================== MOCK MODE =====================
-const isMock = (EMAIL_PROVIDER === 'mock') || (EMAIL_PROVIDER !== 'smtp' && !smtpTransport);
+// ===================== ZOHO MAIL API (SEND) =====================
+let cachedZohoAccessToken = null;
+let cachedZohoExpiry = 0; // epoch ms
+
+async function getZohoAccessToken() {
+  // Use static token if provided (note: you must rotate externally before expiry)
+  if (HAS_ZOHO_TOKEN) return process.env.ZOHO_MAIL_OAUTH_TOKEN.trim();
+  if (!HAS_ZOHO_REFRESH) throw new Error('[ZohoAPI] No token or refresh credentials configured');
+  const now = Date.now();
+  if (cachedZohoAccessToken && now < cachedZohoExpiry - 60_000) {
+    return cachedZohoAccessToken;
+  }
+  const params = new URLSearchParams({
+    grant_type: 'refresh_token',
+    refresh_token: process.env.ZOHO_REFRESH_TOKEN,
+    client_id: process.env.ZOHO_CLIENT_ID,
+    client_secret: process.env.ZOHO_CLIENT_SECRET
+  });
+  const tokenUrl = process.env.ZOHO_OAUTH_TOKEN_URL || `https://accounts.zoho.${ZOHO_REGION}/oauth/v2/token`;
+  const res = await fetch(`${tokenUrl}?${params.toString()}`, { method: 'POST' });
+  if (!res.ok) {
+    const txt = await res.text().catch(()=>'<no-body>');
+    throw new Error(`[ZohoAPI] Token refresh failed (${res.status}): ${txt}`);
+  }
+  const data = await res.json();
+  if (!data.access_token) throw new Error('[ZohoAPI] No access_token in response');
+  cachedZohoAccessToken = data.access_token;
+  cachedZohoExpiry = Date.now() + (Number(data.expires_in || 3600) * 1000);
+  return cachedZohoAccessToken;
+}
+
+async function sendViaZohoAPI({ to, subject, html }) {
+  if (!CAN_USE_ZOHO_API) throw new Error('[ZohoAPI] Not configured');
+  const access = await getZohoAccessToken();
+  const fromAddress = process.env.FROM_EMAIL || process.env.SMTP_USER;
+  if (!fromAddress) throw new Error('[ZohoAPI] FROM_EMAIL not set');
+  const base = process.env.ZOHO_MAIL_BASE_URL || `https://mail.zoho.${ZOHO_REGION}`;
+  const url = `${base}/api/accounts/${ZOHO_ACCOUNT_ID}/messages`;
+  const payload = {
+    fromAddress,
+    toAddress: to,
+    subject,
+    content: html,
+    mailFormat: 'html',
+    replyTo: process.env.ZOHO_REPLY_TO || fromAddress
+  };
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Zoho-oauthtoken ${access}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(payload)
+  });
+  if (!res.ok) {
+    const body = await res.text().catch(()=>'<no-body>');
+    throw new Error(`[ZohoAPI] Send failed (${res.status}): ${body}`);
+  }
+  return true;
+}
+
+// ===================== MOCK MODE + Provider Flags =====================
+const isZohoAPIPrimary = (EMAIL_PROVIDER === 'zoho_api') || (EMAIL_PROVIDER === '' && !smtpTransport && CAN_USE_ZOHO_API);
+const isMock = (!isZohoAPIPrimary) && ((EMAIL_PROVIDER === 'mock') || (EMAIL_PROVIDER !== 'smtp' && EMAIL_PROVIDER !== 'zoho_api' && !smtpTransport));
 
 function logProviderConfig() {
   console.log('[Email] Provider init:', {
     providerRequested: EMAIL_PROVIDER || '(auto)',
-    usingProvider: isMock ? 'mock' : 'smtp',
-    hasSmtpTransport: !!smtpTransport
+    usingProvider: isMock ? 'mock' : (isZohoAPIPrimary ? 'zoho_api' : 'smtp'),
+    hasSmtpTransport: !!smtpTransport,
+    zohoRegion: ZOHO_REGION,
+    zohoAccountIdPresent: !!ZOHO_ACCOUNT_ID,
+    zohoAuthMode: HAS_ZOHO_TOKEN ? 'static-token' : (HAS_ZOHO_REFRESH ? 'refresh-token' : 'none')
   });
 }
 logProviderConfig();
@@ -51,11 +123,15 @@ async function sendViaProvider({ to, subject, html }) {
     console.log('[Email MOCK] Would send to', to, 'subject:', subject);
     return true;
   }
-  if (!isMock) {
-    if (!smtpTransport) {
-      console.warn('[Email] SMTP transport unavailable. Falling back to mock.');
-      return true;
+  if (isZohoAPIPrimary) {
+    try {
+      return await sendViaZohoAPI({ to, subject, html });
+    } catch (e) {
+      console.error('[Email][ZohoAPI] Error:', e.message);
+      throw e;
     }
+  }
+  if (smtpTransport) {
     try {
       await smtpTransport.sendMail({
         from: process.env.FROM_EMAIL || process.env.SMTP_USER,
@@ -63,14 +139,15 @@ async function sendViaProvider({ to, subject, html }) {
         subject,
         html
       });
+      return true;
     } catch (err) {
       if (err && err.code === 'EAUTH') {
         console.error('[Email] Authentication failed. Check SMTP_USER/SMTP_PASS, app password, host/port, or region.');
       }
       throw err;
     }
-    return true;
   }
+  console.warn('[Email] No available provider; using mock fallback semantics.');
   return true;
 }
 

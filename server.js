@@ -226,6 +226,23 @@ app.use('/api/bookmarks', require('./src/routes/bookmarks'));
 app.use('/api/manga-requests', require('./src/routes/mangaRequests'));
 app.use('/api/error-reports', require('./src/routes/errorReports'));
 
+// ================= Zoho OAuth Callback (Temporary / Setup) =================
+// This route captures the authorization code returned by Zoho so you can copy it
+// from Railway logs. Once you have your refresh token you can optionally remove it
+// or lock it down.
+app.get('/oauth/zoho/callback', (req, res) => {
+  const { code, error } = req.query;
+  if (error) {
+    return res.status(400).send(`Zoho OAuth error: ${error}`);
+  }
+  if (!code) {
+    return res.status(400).send('No authorization code received');
+  }
+  // Log once for server operator (avoid logging secrets in production after setup)
+  console.log('[Zoho OAuth] Authorization code received:', code);
+  res.send('Zoho authorization code received. Check server logs. You can now exchange it for tokens.');
+});
+
 
 // Health check endpoint
 app.get('/health', (req, res) => {
