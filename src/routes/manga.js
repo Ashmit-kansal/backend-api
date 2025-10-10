@@ -68,6 +68,38 @@ function calculateRelevanceScore(manga, searchQuery) {
   }
   return score;
 }
+
+// Helper to build the search $or conditions similar to inline logic below
+function buildSearchOrConditions(search) {
+  const searchWords = search.trim().split(/\s+/).filter(word => word.length >= 1);
+  const or = [
+    // Exact matches first
+    { title: { $regex: `^${search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, $options: 'i' } },
+    { alternativeTitles: { $regex: `^${search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, $options: 'i' } },
+    // Starts with matches
+    { title: { $regex: `^${search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`, $options: 'i' } },
+    { alternativeTitles: { $regex: `^${search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`, $options: 'i' } },
+    // Contains matches (full phrase)
+    { title: { $regex: search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), $options: 'i' } },
+    { alternativeTitles: { $regex: search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), $options: 'i' } }
+  ];
+
+  if (searchWords.length > 1) {
+    const significantWords = searchWords.filter(word =>
+      word.length >= 3 && !['the','and','or','in','on','at','to','for','of','with','by','an','a'].includes(word.toLowerCase())
+    );
+    if (significantWords.length >= 2 && significantWords.length >= searchWords.length * 0.6) {
+      significantWords.forEach(word => {
+        const escaped = word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        or.push(
+          { title: { $regex: `\\b${escaped}\\b`, $options: 'i' } },
+          { alternativeTitles: { $regex: `\\b${escaped}\\b`, $options: 'i' } }
+        );
+      });
+    }
+  }
+  return or;
+}
 // Debug route to check database indexes
 router.get('/debug/indexes', async (req, res) => {
   try {
@@ -392,6 +424,55 @@ router.get('/', async (req, res) => {
       success: false,
       message: 'Failed to fetch manga'
     });
+  }
+});
+
+// New: Paginated search endpoint with relevance scoring respected and limit/page honored
+router.get('/search', async (req, res) => {
+  try {
+    const { q, search, page = 1, limit = 20 } = req.query;
+    const term = (q || search || '').trim();
+    const pageNum = Math.max(1, parseInt(page));
+    const pageLimit = Math.max(1, Math.min(parseInt(limit) || 20, 50)); // cap to 50 per page
+
+    if (!term) {
+      return res.status(400).json({ success: false, message: 'Query parameter "q" (or "search") is required' });
+    }
+
+    const query = { $or: buildSearchOrConditions(term) };
+
+    // Pool size: fetch enough docs to score and paginate reliably for first few pages
+    const MAX_POOL = Math.max(100, Math.min(pageLimit * 5, 300)); // 5 pages worth, capped at 300
+
+    const fields = '_id slug title coverImage genres status authors description stats lastUpdated alternativeTitles';
+    const pool = await Manga.find(query).select(fields).limit(MAX_POOL).lean();
+
+    const sorted = pool.sort((a, b) => calculateRelevanceScore(b, term) - calculateRelevanceScore(a, term));
+
+    const start = (pageNum - 1) * pageLimit;
+    const end = start + pageLimit;
+    const pageItems = sorted.slice(start, end);
+
+    // totalItems in pool and total matches (count) for transparency
+    const totalMatches = await Manga.countDocuments(query);
+    const totalScored = sorted.length;
+    const totalPages = Math.ceil(totalScored / pageLimit);
+
+    return res.json({
+      success: true,
+      data: pageItems,
+      pagination: {
+        page: pageNum,
+        itemsPerPage: pageLimit,
+        totalPages,
+        totalItems: totalMatches,
+        totalItemsScored: totalScored,
+        note: totalMatches > totalScored ? 'Pagination limited to top-scored pool' : undefined
+      }
+    });
+  } catch (error) {
+    console.error('Error in paginated search:', error);
+    res.status(500).json({ success: false, message: 'Failed to perform search' });
   }
 });
 // Get manga by slug
