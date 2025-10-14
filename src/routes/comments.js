@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const auth = require('../middleware/auth');
 const Comment = require('../models/Comment');
+const Reply = require('../models/Reply');
 const jwt = require('jsonwebtoken'); // Added for extracting user ID from token
 // Get all comments for the authenticated user
 router.get('/', auth, async (req, res) => {
@@ -342,3 +343,121 @@ router.post('/:id/reactions', auth, async (req, res) => {
   }
 });
 module.exports = router; 
+
+// Replies endpoints (one-level replies to a parent comment)
+// List replies for a parent comment
+router.get('/:commentId/replies', async (req, res) => {
+  try {
+    const { commentId } = req.params;
+    const { page = 1, limit = 10, sort = 'newest' } = req.query;
+    const parent = await Comment.findById(commentId).select('_id');
+    if (!parent) return res.status(404).json({ success: false, message: 'Parent comment not found' });
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+    let sortObject = {};
+    switch (sort) {
+      case 'newest': sortObject = { createdAt: -1 }; break;
+      case 'oldest': sortObject = { createdAt: 1 }; break;
+      default: sortObject = { createdAt: -1 };
+    }
+    const replies = await Reply.find({ parentCommentId: commentId })
+      .populate('userId', 'username avatar')
+      .sort(sortObject)
+      .skip(skip)
+      .limit(parseInt(limit));
+    const total = await Reply.countDocuments({ parentCommentId: commentId });
+    return res.json({ success: true, data: replies, pagination: { page: parseInt(page), pages: Math.ceil(total / parseInt(limit)), total } });
+  } catch (err) {
+    console.error('Error fetching replies:', err);
+    return res.status(500).json({ success: false, message: 'Failed to fetch replies' });
+  }
+});
+
+// Create a reply to a parent comment (no reply-to-reply allowed)
+router.post('/:commentId/replies', auth, async (req, res) => {
+  try {
+    const { commentId } = req.params;
+    const { content, containsSpoilers } = req.body;
+    const userId = req.user.id;
+
+    const user = await require('../models/User').findById(userId);
+    if (!user) return res.status(404).json({ success: false, message: 'User not found' });
+    if (user.isBanned) {
+      return res.status(403).json({ success: false, message: 'Your account has been banned. You cannot post replies.', banReason: user.banReason || 'No reason provided' });
+    }
+    if (!content || !content.trim()) {
+      return res.status(400).json({ success: false, message: 'Reply content is required' });
+    }
+    // Ensure parent comment exists; this also prevents replying to a reply since Reply is a separate collection
+    const parent = await Comment.findById(commentId);
+    if (!parent) return res.status(404).json({ success: false, message: 'Parent comment not found' });
+
+    const reply = await Reply.create({ parentCommentId: commentId, userId, content: content.trim(), containsSpoilers: !!containsSpoilers });
+    await reply.populate('userId', 'username avatar');
+    return res.json({ success: true, data: reply, message: 'Reply created successfully' });
+  } catch (err) {
+    console.error('Error creating reply:', err);
+    return res.status(500).json({ success: false, message: 'Failed to create reply' });
+  }
+});
+
+// Update a reply (author, admin, or moderator)
+router.put('/:commentId/replies/:replyId', auth, async (req, res) => {
+  try {
+    const { commentId, replyId } = req.params;
+    const { content, containsSpoilers } = req.body;
+    const userId = req.user.id;
+
+    const reply = await Reply.findById(replyId);
+    if (!reply) return res.status(404).json({ success: false, message: 'Reply not found' });
+    if (reply.parentCommentId.toString() !== commentId) {
+      return res.status(400).json({ success: false, message: 'Reply does not belong to the specified comment' });
+    }
+
+    const user = await require('../models/User').findById(userId);
+    if (!user) return res.status(404).json({ success: false, message: 'User not found' });
+
+    const canModify = reply.userId.toString() === userId || user.role === 'admin' || user.role === 'moderator';
+    if (!canModify) return res.status(403).json({ success: false, message: 'Not authorized to edit this reply' });
+
+    if (!content || !content.trim()) {
+      return res.status(400).json({ success: false, message: 'Reply content is required' });
+    }
+
+    reply.content = content.trim();
+    reply.containsSpoilers = !!containsSpoilers;
+    reply.isEdited = true;
+    reply.editedAt = new Date();
+    await reply.save();
+    await reply.populate('userId', 'username avatar');
+    return res.json({ success: true, data: reply, message: 'Reply updated successfully' });
+  } catch (err) {
+    console.error('Error updating reply:', err);
+    return res.status(500).json({ success: false, message: 'Failed to update reply' });
+  }
+});
+
+// Delete a reply (author, admin, or moderator)
+router.delete('/:commentId/replies/:replyId', auth, async (req, res) => {
+  try {
+    const { commentId, replyId } = req.params;
+    const userId = req.user.id;
+
+    const reply = await Reply.findById(replyId);
+    if (!reply) return res.status(404).json({ success: false, message: 'Reply not found' });
+    if (reply.parentCommentId.toString() !== commentId) {
+      return res.status(400).json({ success: false, message: 'Reply does not belong to the specified comment' });
+    }
+
+    const user = await require('../models/User').findById(userId);
+    if (!user) return res.status(404).json({ success: false, message: 'User not found' });
+
+    const canModify = reply.userId.toString() === userId || user.role === 'admin' || user.role === 'moderator';
+    if (!canModify) return res.status(403).json({ success: false, message: 'Not authorized to delete this reply' });
+
+    await Reply.deleteOne({ _id: replyId });
+    return res.json({ success: true, message: 'Reply deleted successfully' });
+  } catch (err) {
+    console.error('Error deleting reply:', err);
+    return res.status(500).json({ success: false, message: 'Failed to delete reply' });
+  }
+});
