@@ -4,6 +4,7 @@ const auth = require('../middleware/auth');
 const Comment = require('../models/Comment');
 const Reply = require('../models/Reply');
 const jwt = require('jsonwebtoken'); // Added for extracting user ID from token
+const { commentPostLimiter, replyPostLimiter } = require('../middleware/postRateLimit');
 // Get all comments for the authenticated user
 router.get('/', auth, async (req, res) => {
   try {
@@ -133,7 +134,7 @@ router.get('/manga/:mangaId', async (req, res) => {
   }
 });
 // Create a new comment
-router.post('/', auth, async (req, res) => {
+router.post('/', auth, commentPostLimiter, async (req, res) => {
   try {
     const { mangaId, chapterId, content, containsSpoilers } = req.body;
     const userId = req.user.id;
@@ -373,7 +374,7 @@ router.get('/:commentId/replies', async (req, res) => {
 });
 
 // Create a reply to a parent comment (no reply-to-reply allowed)
-router.post('/:commentId/replies', auth, async (req, res) => {
+router.post('/:commentId/replies', auth, replyPostLimiter, async (req, res) => {
   try {
     const { commentId } = req.params;
     const { content, containsSpoilers } = req.body;
