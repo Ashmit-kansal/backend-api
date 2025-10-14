@@ -6,7 +6,7 @@ const ErrorReport = require('../models/ErrorReport');
 router.post('/', auth, async (req, res) => {
   try {
     // console.log('🔍 User ID from auth:', req.user.id);
-    const { type, commentId, mangaId, chapterNumber, reason, description } = req.body;
+  const { type, commentId, replyId, mangaId, chapterNumber, reason, description } = req.body;
     const userId = req.user.id;
     // console.log('🔍 Type check - type === "comment":', type === 'comment');
     // console.log('🔍 Type check - typeof type:', typeof type);
@@ -26,10 +26,10 @@ router.post('/', auth, async (req, res) => {
       });
     }
     // Validate type
-    if (!['comment', 'chapter'].includes(type)) {
+    if (!['comment', 'reply', 'chapter'].includes(type)) {
       return res.status(400).json({
         success: false,
-        message: 'Invalid report type. Must be "comment" or "chapter"'
+        message: 'Invalid report type. Must be "comment", "reply" or "chapter"'
       });
     }
     // Validate reason
@@ -56,6 +56,19 @@ router.post('/', auth, async (req, res) => {
         });
       }
       // chapterId is optional for comment reports (can be null if comment is on manga page)
+    } else if (normalizedType === 'reply') {
+      if (!replyId || !commentId) {
+        return res.status(400).json({
+          success: false,
+          message: 'Reply ID and parent Comment ID are required for reply reports'
+        });
+      }
+      if (!mangaId) {
+        return res.status(400).json({
+          success: false,
+          message: 'Manga ID is required for reply reports'
+        });
+      }
     } else if (normalizedType === 'chapter') {
       if (!mangaId || !chapterNumber) {
         return res.status(400).json({
@@ -70,6 +83,13 @@ router.post('/', auth, async (req, res) => {
       existingReport = await ErrorReport.findOne({
         type: 'comment',
         commentId,
+        userId,
+        status: { $in: ['pending', 'reviewed'] }
+      });
+    } else if (normalizedType === 'reply') {
+      existingReport = await ErrorReport.findOne({
+        type: 'reply',
+        replyId,
         userId,
         status: { $in: ['pending', 'reviewed'] }
       });
@@ -155,6 +175,46 @@ router.post('/', auth, async (req, res) => {
           message: 'Error looking up comment'
         });
       }
+    } else if (normalizedType === 'reply') {
+      try {
+        const Reply = require('../models/Reply');
+        const Comment = require('../models/Comment');
+        const reply = await Reply.findById(replyId);
+        if (!reply) {
+          return res.status(404).json({ success: false, message: 'Reply not found' });
+        }
+        // Verify the reply belongs to the specified comment
+        if (reply.parentCommentId.toString() !== commentId) {
+          return res.status(400).json({ success: false, message: 'Reply does not belong to the specified comment' });
+        }
+        // Get the parent comment to verify manga/chapter consistency and defaulter context if needed
+        const parentComment = await Comment.findById(commentId);
+        if (!parentComment) {
+          return res.status(404).json({ success: false, message: 'Parent comment not found' });
+        }
+        // The defaulter is the reply author
+        defaulterId = reply.userId;
+        // Validate manga match
+        if (parentComment.mangaId.toString() !== mangaId) {
+          return res.status(400).json({ success: false, message: 'Reply does not belong to the specified manga' });
+        }
+        // If chapterNumber provided and comment has chapterId, validate chapter number match
+        if (chapterNumber && parentComment.chapterId) {
+          try {
+            const Chapter = require('../models/Chapter');
+            const chapter = await Chapter.findById(parentComment.chapterId);
+            if (chapter) {
+              if (chapter.chapterNumber.toString() !== chapterNumber.toString()) {
+                return res.status(400).json({ success: false, message: 'Reply does not belong to the specified chapter' });
+              }
+            }
+          } catch (chapterError) {
+            console.error('Error looking up chapter for validation:', chapterError);
+          }
+        }
+      } catch (replyError) {
+        return res.status(500).json({ success: false, message: 'Error looking up reply' });
+      }
     }
     // For chapter reports, defaulterId will remain null since we can't determine the author
     // Create the error report
@@ -182,7 +242,8 @@ router.post('/', auth, async (req, res) => {
     const errorReport = new ErrorReport({
       type: normalizedType,
       userId,
-      commentId: normalizedType === 'comment' ? commentId : undefined,
+      commentId: normalizedType === 'comment' || normalizedType === 'reply' ? commentId : undefined,
+      replyId: normalizedType === 'reply' ? replyId : undefined,
       mangaId: mangaId, // Always include mangaId for both comment and chapter reports
       chapterNumber: chapterNumber, // Always include chapterNumber for both comment and chapter reports
       defaulterId,
@@ -225,7 +286,7 @@ router.post('/', auth, async (req, res) => {
 router.get('/my-reports', auth, async (req, res) => {
   try {
     const userId = req.user.id;
-    const reports = await ErrorReport.getUserReports(userId);
+  const reports = await ErrorReport.getUserReports(userId);
     res.json({
       success: true,
       data: reports
@@ -255,7 +316,8 @@ router.get('/', auth, async (req, res) => {
     const reports = await ErrorReport.find(query)
       .populate('userId', 'username email')
       .populate('defaulterId', 'username email')
-      .populate('commentId', 'content author')
+      .populate('commentId', 'content userId')
+      .populate('replyId', 'content userId')
       .populate('mangaId', 'title')
       .populate('reviewedBy', 'username')
       .sort({ createdAt: -1 })

@@ -1,10 +1,10 @@
 const mongoose = require('mongoose');
 
 const errorReportSchema = new mongoose.Schema({
-  // Report type: 'comment' or 'chapter'
+  // Report type: 'comment', 'reply' or 'chapter'
   type: {
     type: String,
-    enum: ['comment', 'chapter'],
+    enum: ['comment', 'reply', 'chapter'],
     required: true
   },
   
@@ -19,6 +19,11 @@ const errorReportSchema = new mongoose.Schema({
   commentId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Comment'
+  },
+  // For reply reports
+  replyId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Reply'
   },
   
   // For chapter reports
@@ -87,6 +92,7 @@ errorReportSchema.index({ type: 1, status: 1 });
 errorReportSchema.index({ userId: 1 });
 errorReportSchema.index({ defaulterId: 1 });
 errorReportSchema.index({ commentId: 1 });
+errorReportSchema.index({ replyId: 1 });
 errorReportSchema.index({ mangaId: 1, chapterNumber: 1 });
 errorReportSchema.index({ createdAt: -1 });
 
@@ -104,7 +110,8 @@ errorReportSchema.statics.getReportsByType = function(type, status = null) {
   return this.find(query)
     .populate('userId', 'username email')
     .populate('defaulterId', 'username email')
-    .populate('commentId', 'content author')
+    .populate('commentId', 'content userId')
+    .populate('replyId', 'content userId')
     .populate('mangaId', 'title')
     .populate('reviewedBy', 'username')
     .sort({ createdAt: -1 });
@@ -114,7 +121,8 @@ errorReportSchema.statics.getReportsByType = function(type, status = null) {
 errorReportSchema.statics.getUserReports = function(userId) {
   return this.find({ userId })
     .populate('defaulterId', 'username email')
-    .populate('commentId', 'content')
+    .populate('commentId', 'content userId')
+    .populate('replyId', 'content userId')
     .populate('mangaId', 'title')
     .sort({ createdAt: -1 });
 };
