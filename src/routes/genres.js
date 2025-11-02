@@ -5,7 +5,7 @@ const Genre = require('../models/Genre');
 // Get all genres
 router.get('/', async (req, res) => {
   try {
-    const { limit = 50, featured = false } = req.query;
+  const { limit = 200, featured = false } = req.query;
     // First try to get genres from the Genre model
     let genres = await Genre.find({ isActive: true })
       .select('name displayName color slug mangaIds isActive')
