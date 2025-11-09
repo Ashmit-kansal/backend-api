@@ -122,7 +122,8 @@ router.get('/', async (req, res) => {
             genres: '$mangaDetails.genres',
             status: '$mangaDetails.status',
             authors: '$mangaDetails.authors',
-            slug: '$mangaDetails.slug'
+            slug: '$mangaDetails.slug',
+            lastUpdated: '$mangaDetails.lastUpdated'
           },
           lastReadId: {
             _id: '$lastReadChapter._id',
