@@ -429,6 +429,13 @@ router.get('/', async (req, res) => {
 
 // New: Paginated search endpoint with relevance scoring respected and limit/page honored
 router.get('/search', async (req, res) => {
+  const searchTerm = (req.query.q || req.query.search || '').trim();
+  const orConditions = buildSearchOrConditions(searchTerm);
+  const searchWords = searchTerm.split(/\s+/).filter(Boolean);
+  console.log('Search words:', searchWords);
+  console.log(`🔍 Total OR conditions in query: ${orConditions.length}`);
+
+  // After results are found, log up to 10 result titles
   try {
     const { q, search, page = 1, limit = 20 } = req.query;
     const term = (q || search || '').trim();
@@ -449,9 +456,14 @@ router.get('/search', async (req, res) => {
 
     const sorted = pool.sort((a, b) => calculateRelevanceScore(b, term) - calculateRelevanceScore(a, term));
 
+
     const start = (pageNum - 1) * pageLimit;
     const end = start + pageLimit;
     const pageItems = sorted.slice(start, end);
+
+  // Log up to 10 result titles
+  const logResults = pageItems.slice(0, 10).map(m => m.title);
+  console.log('🔍 Search results:', JSON.stringify(logResults, null, 2));
 
     // totalItems in pool and total matches (count) for transparency
     const totalMatches = await Manga.countDocuments(query);
