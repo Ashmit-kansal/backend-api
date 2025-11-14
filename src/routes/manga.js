@@ -314,9 +314,10 @@ router.get('/', async (req, res) => {
       
       console.log('🔍 Total OR conditions in query:', query.$or.length);
     }
-    // Genre filter
+    // Genre filter - case-insensitive to match both "Action" and "action"
     if (genre) {
-      query.genres = { $in: [genre] };
+      const escapedGenre = genre.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      query.genres = { $regex: new RegExp(`^${escapedGenre}$`, 'i') };
     }
     // Status filter
     if (status) {
@@ -626,20 +627,26 @@ router.delete('/:id', async (req, res) => {
     });
   }
 });
-// Get manga by genre
+// Get manga by genre (legacy endpoint - prefer /genres/:genre/manga)
 router.get('/genre/:genre', async (req, res) => {
   try {
     const { page = 1, limit = 20 } = req.query;
     const skip = (page - 1) * limit;
+    
+    // Escape special regex characters for safety
+    const escapedGenre = req.params.genre.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    
+    // Use case-insensitive regex match
     const manga = await Manga.find({
-      genres: { $in: [req.params.genre] }
+      genres: { $regex: new RegExp(`^${escapedGenre}$`, 'i') }
     })
     .select('_id slug title coverImage genres status authors description stats lastUpdated')
     .sort({ lastUpdated: -1 })
     .skip(skip)
     .limit(parseInt(limit));
+    
     const total = await Manga.countDocuments({
-      genres: { $in: [req.params.genre] }
+      genres: { $regex: new RegExp(`^${escapedGenre}$`, 'i') }
     });
     res.json({
       success: true,

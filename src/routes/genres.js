@@ -112,54 +112,26 @@ router.get('/:genre/manga', async (req, res) => {
     const skip = (page - 1) * limit;
     const genreName = req.params.genre;
     
-    // Try exact match first
-    let manga = await Manga.find({
-      genres: { $in: [genreName] }
+    // console.log(`🎯 Backend: Fetching manga for genre "${genreName}", page ${page}, limit ${limit}`);
+    
+    // Escape special regex characters for safety
+    const escapedGenreName = genreName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    
+    // Use case-insensitive regex match to handle both "josei" and "Josei"
+    const manga = await Manga.find({
+      genres: { $regex: new RegExp(`^${escapedGenreName}$`, 'i') }
     })
     .select('_id slug title coverImage genres status authors description stats lastUpdated')
     .sort({ lastUpdated: -1 })
     .skip(skip)
     .limit(parseInt(limit));
     
-    let total = await Manga.countDocuments({
-      genres: { $in: [genreName] }
+    const total = await Manga.countDocuments({
+      genres: { $regex: new RegExp(`^${escapedGenreName}$`, 'i') }
     });
     
-    // If no results, try case-insensitive match
-    if (total === 0) {
-      // Get all manga to find the exact case of the genre name
-      const allManga = await Manga.find({}, 'genres');
-      
-      // Find the exact genre name from manga documents (case-insensitive)
-      let exactGenreName = null;
-      for (const mangaDoc of allManga) {
-        if (mangaDoc.genres && Array.isArray(mangaDoc.genres)) {
-          const foundGenre = mangaDoc.genres.find(g => g.toLowerCase() === genreName.toLowerCase());
-          if (foundGenre) {
-            exactGenreName = foundGenre;
-            break;
-          }
-        }
-      }
-      
-      if (exactGenreName) {
-        // console.log(`Genre case correction: "${genreName}" -> "${exactGenreName}"`);
-        // Use the exact genre name from the manga documents (with correct case)
-        manga = await Manga.find({
-          genres: { $in: [exactGenreName] }
-        })
-        .select('_id slug title coverImage genres status authors description stats lastUpdated')
-        .sort({ lastUpdated: -1 })
-        .skip(skip)
-        .limit(parseInt(limit));
-        
-        total = await Manga.countDocuments({
-          genres: { $in: [exactGenreName] }
-        });
-      } else {
-        // console.log(`No case-insensitive match found for genre: "${genreName}"`);
-      }
-    }
+    // console.log(`📊 Case-insensitive match found ${total} total manga, returning ${manga.length} for this page`);
+    // console.log(`📋 Manga titles:`, manga.map(m => m.title));
     
     res.json({
       success: true,
