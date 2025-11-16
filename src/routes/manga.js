@@ -500,7 +500,7 @@ router.get('/slug/:slug', async (req, res) => {
     }
     // Fetch chapters for this manga
     const chapters = await Chapter.find({ mangaId: manga._id })
-      .select('_id chapterNumber title scrapedAt lastUpdated createdAt updatedAt')
+      .select('_id chapterNumber title scrapedAt lastUpdated createdAt updatedAt views')
       .sort({ chapterNumber: 1 });
     // Create manga data with chapters included
     const mangaWithChapters = {
@@ -535,7 +535,7 @@ router.get('/:id', async (req, res) => {
     }
     // Fetch chapters for this manga
     const chapters = await Chapter.find({ mangaId: manga._id })
-      .select('_id chapterNumber title scrapedAt lastUpdated createdAt updatedAt')
+      .select('_id chapterNumber title scrapedAt lastUpdated createdAt updatedAt views')
       .sort({ chapterNumber: 1 });
     // Create manga data with chapters included
     const mangaWithChapters = {
